@@ -24,3 +24,7 @@ jobs:
         run: node --check diagnostics/runtime-audit.js
       - name: Runtime audit and proxy regression tests
         run: node test/runtime-audit.test.js
+      - name: Read-only message queue diagnostic syntax
+        run: node --check diagnostics/queue-audit.js
+      - name: Outgoing message event correlation audit tests
+        run: node test/queue-audit.test.js
