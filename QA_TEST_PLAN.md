@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.12
+# Manual QA Plan — Discord AutoDelete v3.13
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,19 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.13 — true minimize without pill
+
+1. On a freshly loaded and reviewed v3.13, confirm the dashboard is visible and starts **disabled**.
+2. Click **−**. Confirm **nothing** remains on screen: no `AutoDelete · Paused` pill, icon, draggable area, or replacement button.
+3. In the browser console, run `DiscordAutoDelete.status()` to confirm the controller still exists. Run `DiscordAutoDelete.open()`; the complete panel should return with existing settings unchanged.
+4. Click **−** again and re-paste the same reviewed `autodelete.js` into **the same tab**. It should reopen the existing panel instead of creating a second instance.
+5. Minimize again, then run `DiscordAutoDelete.openDiagnostics()`. The original panel should return with Diagnostics expanded.
+6. Optional **controlled** test: enable auto-delete in a private test channel, minimize, and verify any scheduled deletion still works while hidden. **Minimize does not disable or cancel jobs.** Avoid sending large batches of messages.
+7. After reopening, click **Disable** and verify queue cancellation. Clicking **×** must stop the controller and remove the overlay.
+8. After a browser refresh, neither the UI nor a previous in-memory queue should continue.
+
+The mocked GitHub Actions tests cover hiding, reopening, and background queue behavior. Live browser visual behavior needs manual verification.
 
 ## v3.12 glass design and 1-second minimum
 
