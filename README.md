@@ -1,4 +1,4 @@
-# Discord AutoDelete v3.2.1
+# Discord AutoDelete v3.3
 
 An experimental **English-first, in-page control panel** for deleting your own new Discord messages after a configurable delay. This script runs in the Discord web client's JavaScript console. The panel opens in **paused** mode by default.
 
@@ -6,13 +6,13 @@ An experimental **English-first, in-page control panel** for deleting your own n
 
 ## Current status: live Discord compatibility unverified
 
-**As of October 25, 2026 the user-provided screenshots still show a connection error with v3.2.** Running the original deletion script again is unlikely to reveal new information. Instead, first run the [read-only module audit](./diagnostics/runtime-audit.js) to investigate the suspicious 83–86 cross-family matches. It does not send/edit/delete messages, fetch a token, read message content, or make any explicit network request.
+**The v3.2 client screenshots showed 83–86 false-positive module candidates. The v1.1 diagnostic revealed 83 objects simultaneously matching five unrelated module families. v3.3 now filters likely translation/catch-all Proxies before method detection, following a documented Vencord blacklist mechanism. This is a specific fix for that failure pattern, but real Discord deletion is still unverified.** It does not send/edit/delete messages, fetch a token, read message content, or make any explicit network request.
 
 1. Reload Discord Web to stop any previous AutoDelete instance.
 2. Review and paste `diagnostics/runtime-audit.js` into the browser console.
 3. Share only the aggregate `[AutoDelete Audit]` JSON. It contains no account IDs or messages. Do not share browser cookies, Authorization headers, or tokens.
 
-See the [full October 2026 audit (Russian)](./research/AUDIT_2026-10-25_RU.md). We will not add another speculative selection heuristic without evidence about the actual runtime.
+See the [full October 2026 audit (Russian)](./research/AUDIT_2026-10-25_RU.md). The previous audit guided the proxy-filter regression test; if v3.3 still fails, share its filtered-proxy count and module diagnostics without credentials.
 
 
 ## Features
@@ -60,9 +60,10 @@ The original v1 and v2 versions failed on some real Discord builds:
 FluxDispatcher: 0 candidates
 ```
 
-### What changed in v3–v3.2
+### What changed in v3–v3.3
 
 - **v3.1:** Searches all Webpack runtimes as a single pool, diagnoses ambiguous matches by candidate counts, and discovers the REST client from `getAPIBaseURL` exports and nested `HTTP` transports. This addresses a case where `REST=false` did not mean that REST was absent.
+- **v3.3:** Rejects known Discord `IntlMessagesProxy` exports and anonymous catch-all Proxy exports **before** reading methods such as `deleteMessage` or `del`. That prevents translation proxies from being mistaken for 83 independently valid API clients. Filters ambiguous Flux event bus candidates instead of subscribing to all of them. Adds mocked tests for 83 caching proxies (some untagged). The log and `DiscordAutoDelete.status()` show how many proxies were filtered. [Upstream precedent: Vencord's `shouldIgnoreValue`](https://github.com/Vendicated/Vencord/blob/main/src/webpack/webpack.ts).
 - **v3.2:** Re-exported Discord functions may appear through dozens of wrapper objects. Module selection now groups wrappers by **actual function reference** rather than treating every wrapper as a different operation. If distinct deletion functions remain, the script stops rather than guessing. 
 - Flux is **not mandatory**. The script inspects named Webpack exports across runtime caches and accepts candidates with the core subscribe/dispatch interface.
 - If an event dispatcher cannot be found but `MessageStore` and `SelectedChannelStore` are accessible, it can monitor the **currently open channel** by polling its cached messages.
@@ -101,7 +102,7 @@ Mocked tests cover multiple runtimes, named exports, safe default, event monitor
 [Discord's self-bot policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) prohibits this category of automation, including scripts that change your own messages. Use of a secondary account doesn't make the method permitted.
 ### Current test status
 
-Version 3.2 passed GitHub Actions checks using mocks, including regression cases with 83 duplicated REST exports, duplicated MessageActions, and genuinely ambiguous deletion functions. **This is not a live Discord test.** If the UI still says ERROR, note the module candidate counts shown in the panel; do not share or extract an authorization token.
+Version 3.3 passed GitHub Actions checks using mocks, including regression cases with 83 duplicated REST exports, duplicated MessageActions, and genuinely ambiguous deletion functions. **This is not a live Discord test.** If the UI still says ERROR, note the module candidate counts shown in the panel; do not share or extract an authorization token.
 
 ### Audit v1.1 (HTTP shape correction)
 
@@ -114,3 +115,10 @@ copy(JSON.stringify(window.AutoDeleteAuditReport, null, 2))
 ```
 
 The command copies the aggregated diagnostic object created by the audit, **not** a user token or message content.
+
+
+### The actual root-cause hypothesis
+
+The user's v1.1 read-only audit showed **83 export values that simultaneously resemble UserStore, MessageActions, RestAPI, MessageStore, and SelectedChannelStore**. Their properties were stable on repeated reads and often present as own properties. This is characteristic of caching i18n / catch-all proxies. [Vencord's actual webpack loader](https://github.com/Vendicated/Vencord/blob/main/src/webpack/webpack.ts) explicitly excludes `IntlMessagesProxy` and values that produce non-`undefined` for a nonsense key, because i18n proxies can **cache the synthesized value on first read**. Our previous search did not exclude these modules.
+
+The result explains why `84 distinct deleteMessage functions` was misleading: those may be 83 translation functions generated on demand, plus one real method. **This remains a hypothesis until a live v3.3 run**; we do not log any contents or credentials to verify it.
