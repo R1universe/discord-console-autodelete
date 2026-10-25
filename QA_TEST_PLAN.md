@@ -1,6 +1,6 @@
 # Manual QA Plan — Discord AutoDelete v3.3
 
-**Status:** One successful deletion was reported by the user in a live Discord Web session on October 25, 2026. The remaining cases have **not** been independently verified.
+**Status (October 25, 2026):** The user reports passing **all 9 initial manual scenarios** from the chat's QA checklist: one-message timer, 3 sequential messages, Pause, changed delay, server/DM scope, channel switching, other-author safety, reload behavior, and background-tab behavior. The first and third have screenshots; most others are user-reported without full logs. Two **unresolved bugs** were observed: [one visible message with two pending jobs](https://github.com/R1universe/discord-console-autodelete/issues/1) and [HTTP 404 with UI Errors=0](https://github.com/R1universe/discord-console-autodelete/issues/2). This does **not** establish a clean release.
 
 **Scope:** Voluntary, low-volume checks on a personal test server or with consenting DM participants. All tests use harmless content. Do not stress-test Discord's API, spam, send bulk messages, or use private conversations without permission.
 
@@ -15,6 +15,24 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## Actual manual test observations — 2026-10-25
+
+| Initial chat test | User result | Evidence / qualification |
+| --- | --- | --- |
+| 1. Single message / 10s | PASS with anomaly | Message reportedly deleted, but **Queued=2** and two scheduling log lines for one visible outgoing message. Issue #1. |
+| 2. Three messages | PASS (reported) | No screenshot provided. |
+| 3. Pause cancels queued deletion | PASS | Screenshot after pause shows Queued=0; user confirms message remained. |
+| 4. Changing delay | PASS (reported) | No screenshot. |
+| 5. Server vs DM scopes | PASS (reported) | No screenshot. |
+| 6. Switching channels | PASS (reported) | No screenshot. |
+| 7. Other user's message protected | PASS (reported) | No screenshot. |
+| 8. Page reload | PASS (reported) | No screenshot. |
+| 9. Background tab | PASS (reported) | No screenshot. |
+
+**Cross-cutting issue:** Console shows rejected Discord `DELETE` HTTP requests (404), even when Activity Log says “Delete request completed” and `Errors` stays 0. Issue #2. Existing counts **do not demonstrate 100% successful deletion**. We should distinguish *observed outcome* from *reported internal call success*.
+
+**Release gate:** Do not call v3.3 a stable release until these two issues are diagnosed and verified, preferably using a single quiet test channel with consent and *no token or private-message logging*.
 
 ## P0 — functionality and safety
 
