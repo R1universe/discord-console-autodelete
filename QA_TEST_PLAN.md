@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.4
+# Manual QA Plan — Discord AutoDelete v3.5
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,19 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.5 focused verification — separate delays
+
+This version changes scheduling rules; **its compatibility with the live Discord client is not yet verified**.
+
+1. Refresh Discord Web to unload previous scripts. Run the reviewed v3.5 code.
+2. In the panel choose **Everywhere**; set **Servers = 60 seconds**, **DMs = 10 seconds**. Start paused.
+3. Enable AutoDelete and send **one harmless message in your own test server channel**. Expected one job (`Queued=1`) with ~60s until deletion. Press Pause before it fires.
+4. Resume in a consenting DM, send **one harmless test message**. Expected one job with the 10s delay, then pause to cancel if desired.
+5. Check the changed labels and `DiscordAutoDelete.status()`: `serverDelaySeconds=60`, `dmDelaySeconds=10`.
+6. Check saving settings over reload and the initial **PAUSED** state. Changing either setting must not recalculate existing pending timers.
+
+Never share message content, channel IDs, or authentication data. Respect existing 404/429 issues, and avoid unnecessary DELETE requests.
 
 ## v3.4 focused verification — one message, no deletion required
 
