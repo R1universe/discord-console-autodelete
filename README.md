@@ -4,6 +4,17 @@ An experimental **English-first, in-page control panel** for deleting your own n
 
 > **Important:** This is an unsupported client modification / self-bot. Discord prohibits automating normal user accounts and may suspend or terminate your account. Changes to Discord's internal code may break this project at any time. Tests use simulated Discord internals; **live account deletion has not been verified**.
 
+## Current status: live Discord compatibility unverified
+
+**As of October 25, 2026 the user-provided screenshots still show a connection error with v3.2.** Running the original deletion script again is unlikely to reveal new information. Instead, first run the [read-only module audit](./diagnostics/runtime-audit.js) to investigate the suspicious 83–86 cross-family matches. It does not send/edit/delete messages, fetch a token, read message content, or make any explicit network request.
+
+1. Reload Discord Web to stop any previous AutoDelete instance.
+2. Review and paste `diagnostics/runtime-audit.js` into the browser console.
+3. Share only the aggregate `[AutoDelete Audit]` JSON. It contains no account IDs or messages. Do not share browser cookies, Authorization headers, or tokens.
+
+See the [full October 2026 audit (Russian)](./research/AUDIT_2026-10-25_RU.md). We will not add another speculative selection heuristic without evidence about the actual runtime.
+
+
 ## Features
 
 - Floating, draggable dashboard in English, with status, queue, activity log and controls.
