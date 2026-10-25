@@ -33,7 +33,7 @@
   };
   const state = {
     ready: false, enabled: false, error: "", pending: new Map(),
-    requests: 0, failed: 0, skipped: 0, detected: 0,
+    requests: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), cacheSeen: new Map(), monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false
   };
   let ticker = null;
@@ -226,51 +226,68 @@
 
   function discover() {
     const chunk = window.webpackChunkdiscord_app;
-    if (!chunk || typeof chunk.push !== "function") throw new Error("Webpack Discord не найден");
-    const runtimes = [];
-    const marker = Symbol("DiscordAutoDelete");
+    if (!chunk || typeof chunk.push !== "function") throw new Error("Discord's Webpack runtime is not available.");
+    const runtimes = [], marker = Symbol("AutoDelete");
     try {
       chunk.push([[marker], {}, req => {
         if (req?.c && !runtimes.includes(req)) runtimes.push(req);
       }]);
       if (chunk.at(-1)?.[0]?.[0] === marker) chunk.pop();
     } catch (err) {
-      throw new Error("Webpack недоступен: " + String(err?.message ?? err));
+      throw new Error("Unable to inspect module registry: " + String(err?.message ?? err));
     }
-    runtimes.sort((a,b) => Object.keys(b.c).length - Object.keys(a.c).length);
-    if (!runtimes.length) throw new Error("Кэш модулей пуст");
+    runtimes.sort((a, b) => Object.keys(b.c).length - Object.keys(a.c).length);
+    if (!runtimes.length) throw new Error("No Webpack module cache was found.");
 
-    let lastError = "Неизвестная ошибка";
+    const diagnostics = [];
     for (const req of runtimes) {
-      try {
-        const items = addCandidates(req.c);
-        const dispatcher = choose(items, item =>
-          typeof item.subscribe === "function" &&
-          typeof item.unsubscribe === "function" &&
-          typeof item.dispatch === "function" &&
-          (item._subscriptions != null || item._actionHandlers != null || typeof item.flushWaitQueue === "function"),
-          "FluxDispatcher",
-          item => item._subscriptions != null && typeof item.flushWaitQueue === "function"
-        );
-        const users = choose(items, item =>
-          typeof item.getCurrentUser === "function" && typeof item.getUser === "function",
-          "UserStore", storeNamed("UserStore")
-        );
-        const actions = choose(items, item =>
-          typeof item.deleteMessage === "function",
-          "MessageActions",
-          item => typeof item.startEditMessage === "function" || typeof item.editMessage === "function"
-        );
-        const channels = items.filter(item => {
-          try { return typeof item.getChannel === "function" && storeNamed("ChannelStore")(item); } catch { return false; }
-        });
-        const channelStore = channels.length === 1 ? channels[0] : null;
-        const accountId = String(users.getCurrentUser()?.id ?? "");
-        if (!validId(accountId)) throw new Error("Невозможно определить текущего пользователя");
-        return { dispatcher, users, actions, channelStore, accountId, moduleCount: items.length };
-      } catch (err) { lastError = String(err?.message ?? err); }
+      const items = addCandidates(req.c);
+      // Some builds export the active Dispatcher via a minified property of this module.
+      const known = req.c?.[73153]?.exports;
+      if (known) {
+        for (const value of Object.values(known)) if (!items.includes(value)) items.push(value);
+      }
+      function pick(predicate, preference) {
+        const matches = items.filter(x => { try { return predicate(x); } catch { return false; } });
+        if (!matches.length) return null;
+        const preferred = matches.filter(x => { try { return preference?.(x); } catch { return false; } });
+        return preferred.length === 1 ? preferred[0] : matches.length === 1 ? matches[0] : null;
+      }
+      const users = pick(x => typeof x?.getCurrentUser === "function" &&
+        typeof x?.getUser === "function", storeNamed("UserStore"));
+      const actions = pick(x => typeof x?.deleteMessage === "function",
+        x => typeof x.startEditMessage === "function" || typeof x.editMessage === "function");
+      const rest = pick(x => typeof x?.del === "function" &&
+        typeof x?.get === "function" && typeof x?.post === "function",
+        x => typeof x.patch === "function" && typeof x.put === "function");
+      const store = pick(x => typeof x?.getMessages === "function" &&
+        typeof x?.getMessage === "function", storeNamed("MessageStore"));
+      const selected = pick(x => typeof x?.getChannelId === "function",
+        storeNamed("SelectedChannelStore"));
+      const channel = pick(x => typeof x?.getChannel === "function" &&
+        (typeof x?.getDMFromUserId === "function" || typeof x?.getChannels === "function"),
+        storeNamed("ChannelStore"));
+
+      // No undocumented/private property is required on a Dispatcher candidate:
+      // other projects confirm that some current builds expose only subscribe+dispatch.
+      const dispatchers = items.filter(x => {
+        try { return typeof x?.subscribe === "function" && typeof x?.dispatch === "function"; }
+        catch { return false; }
+      }).filter((item, idx, arr) => arr.indexOf(item) === idx).slice(0, 24);
+      const accountId = String(users?.getCurrentUser()?.id ?? "");
+      const canObserve = dispatchers.length > 0 || (store && selected);
+      if (users && validId(accountId) && (actions || rest) && canObserve) {
+        return {
+          users, actions, rest, messageStore: store, selectedChannel: selected,
+          channelStore: channel, dispatchers, accountId, moduleCount: items.length
+        };
+      }
+      diagnostics.push("cache=" + items.length + " user=" + !!users +
+        " actions=" + !!actions + " REST=" + !!rest +
+        " eventSources=" + dispatchers.length + " messageStore=" + !!store +
+        " selected=" + !!selected);
     }
-    throw new Error(lastError);
+    throw new Error("Required internal modules not found. " + diagnostics.join("; "));
   }
 
   function scopeMatches(msg, channelId) {
@@ -279,17 +296,20 @@
     const type = channel?.type;
     const direct = type === 1 || type === 3;
     const guild = Boolean(msg.guild_id ?? msg.guildId ?? channel?.guild_id ?? channel?.guildId);
-    if (config.scope === "dm") return direct;
+    if (config.scope === "dm") return direct || (!guild && !channel);
     return guild && !direct;
   }
   function onCreate(event) {
     if (!state.enabled || !hooks || state.destroyed) return;
     const msg = event?.message;
     if (!msg || String(msg.author?.id ?? "") !== state.accountId) return;
+    if (event?.optimistic === true || msg.optimistic === true) return;
     const id = String(msg.id ?? "");
     const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
-    if (!validId(id) || !validId(channelId) || state.pending.has(id)) return;
+    if (!validId(id) || !validId(channelId) || state.pending.has(id) || state.processed.has(id)) return;
     if (!scopeMatches(msg, channelId)) { state.skipped++; return; }
+    state.processed.add(id);
+    if (state.processed.size > 5000) state.processed.delete(state.processed.values().next().value);
     state.detected++;
     const deadline = Date.now() + config.delay * 1000;
     const timer = setTimeout(async () => {
@@ -298,34 +318,82 @@
       if (state.destroyed || !state.enabled) return;
       if (String(hooks.users.getCurrentUser()?.id ?? "") !== state.accountId) {
         state.skipped++;
-        notify("Аккаунт изменился: удаление пропущено", "bad");
+        notify("Account changed — skipping deletion.", "bad");
         render();
         return;
       }
       try {
-        await Promise.resolve(hooks.actions.deleteMessage(channelId, id));
+        if (hooks.rest) {
+          await Promise.resolve(hooks.rest.del({ url: "/channels/" + channelId + "/messages/" + id }));
+        } else {
+          await Promise.resolve(hooks.actions.deleteMessage(channelId, id));
+        }
         state.requests++;
-        notify("Запрос удаления отправлен", "good");
+        notify("Delete request completed.", "good");
       } catch (err) {
         state.failed++;
-        notify("Ошибка удаления: " + String(err?.message ?? err).slice(0, 140), "bad");
+        notify("Delete failed: " + String(err?.message ?? err).slice(0, 140), "bad");
       }
       render();
     }, config.delay * 1000);
     state.pending.set(id, { timer, deadline });
-    notify("Новое сообщение: удаление через " + config.delay + " сек.");
+    notify("Message queued for " + config.delay + "s.");
     render();
   }
   function onDelete(event) { cancel(event?.id ?? event?.messageId ?? event?.message?.id); }
 
+  // Cache polling is an independent fallback when Discord does not expose a
+  // usable FluxDispatcher. It only sees messages in the currently open channel.
+  function cachedMessages() {
+    if (!hooks?.messageStore || !hooks?.selectedChannel) return null;
+    const channelId = String(hooks.selectedChannel.getChannelId?.() ?? "");
+    if (!validId(channelId)) return null;
+    const messages = hooks.messageStore.getMessages(channelId);
+    const items = messages?._array ?? messages?.toArray?.() ?? [];
+    return { channelId, items: Array.isArray(items) ? items : [] };
+  }
+  function scanCache() {
+    if (!state.ready || !state.enabled || state.destroyed || !hooks) return;
+    let cache;
+    try { cache = cachedMessages(); } catch { return; }
+    if (!cache) return;
+    const { channelId, items } = cache;
+    if (!state.cacheSeen.has(channelId)) {
+      // Establish a baseline instead of accidentally deleting old history.
+      state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
+      return;
+    }
+    const seen = state.cacheSeen.get(channelId);
+    for (const msg of items) {
+      const id = String(msg?.id ?? "");
+      if (!validId(id) || seen.has(id)) continue;
+      seen.add(id);
+      if (String(msg.author?.id ?? "") === state.accountId)
+        onCreate({ message: msg, channelId });
+    }
+    if (seen.size > 2500) {
+      state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
+    }
+  }
+  function primeCache() {
+    state.cacheSeen.clear();
+    try {
+      const cache = cachedMessages();
+      if (cache) state.cacheSeen.set(cache.channelId, new Set(cache.items.map(m => String(m?.id ?? ""))));
+    } catch {}
+  }
+
   function disconnect() {
     if (hooks) {
-      try { hooks.dispatcher.unsubscribe("MESSAGE_CREATE", onCreate); } catch {}
-      try { hooks.dispatcher.unsubscribe("MESSAGE_DELETE", onDelete); } catch {}
+      for (const dispatcher of hooks.activeDispatchers ?? []) {
+        try { dispatcher.unsubscribe?.("MESSAGE_CREATE", onCreate); } catch {}
+        try { dispatcher.unsubscribe?.("MESSAGE_DELETE", onDelete); } catch {}
+      }
     }
     hooks = null;
     state.ready = false;
     state.enabled = false;
+    state.cacheSeen.clear();
     clearPending();
   }
   function connect() {
@@ -335,47 +403,64 @@
       const discovered = discover();
       hooks = discovered;
       state.accountId = discovered.accountId;
-      discovered.dispatcher.subscribe("MESSAGE_CREATE", onCreate);
-      discovered.dispatcher.subscribe("MESSAGE_DELETE", onDelete);
+      discovered.activeDispatchers = [];
+      for (const dispatcher of discovered.dispatchers) {
+        try {
+          dispatcher.subscribe("MESSAGE_CREATE", onCreate);
+          dispatcher.subscribe("MESSAGE_DELETE", onDelete);
+          discovered.activeDispatchers.push(dispatcher);
+        } catch {
+          try { dispatcher.unsubscribe?.("MESSAGE_CREATE", onCreate); } catch {}
+        }
+      }
+      const usingCache = !!(discovered.messageStore && discovered.selectedChannel);
+      if (!discovered.activeDispatchers.length && !usingCache)
+        throw new Error("No active message-event source was found.");
+      state.monitor = discovered.activeDispatchers.length ?
+        "Flux (" + discovered.activeDispatchers.length + ")" + (usingCache ? " + open-channel cache" : "") :
+        "Open-channel cache only";
       state.ready = true;
-      state.enabled = false; // Explicit opt-in on every injection / reconnect
-      notify("Модули найдены (" + discovered.moduleCount + "). Нажми «Включить».", "good");
+      state.enabled = false;
+      notify("Connected: " + state.monitor + ". Click Enable to start.", "good");
+      if (!discovered.activeDispatchers.length)
+        notify("Limited coverage: only the open channel is monitored.", "bad");
     } catch (err) {
       disconnect();
       state.error = String(err?.message ?? err);
-      notify("Ошибка модулей: " + state.error, "bad");
+      notify("Connection error: " + state.error, "bad");
     }
     render();
     return state.ready;
   }
-  function pause() { state.enabled = false; clearPending(); notify("Пауза: все ожидающие таймеры отменены"); render(); }
+  function pause() { state.enabled = false; clearPending(); notify("Paused — scheduled deletions cancelled."); render(); }
   function resume() {
     if (!state.ready || !hooks) return false;
     if (String(hooks.users.getCurrentUser()?.id ?? "") !== state.accountId) {
-      state.error = "Аккаунт изменился, переподключись";
+      state.error = "Account changed. Reconnect first.";
       pause();
       render();
       return false;
     }
+    primeCache();
     state.enabled = true;
-    notify("Автоудаление включено", "good");
+    notify("Auto-delete enabled.", "good");
     render();
     return true;
   }
   function setDelay(value) {
-    if (!validDelay(value)) throw new RangeError("Задержка: целое число 2–86400 сек.");
+    if (!validDelay(value)) throw new RangeError("Delay must be between 2 and 86400 seconds.");
     config.delay = Number(value);
     save();
     render();
-    notify("Новая задержка: " + config.delay + " сек. (для новых сообщений)");
+    notify("New delay: " + config.delay + " seconds (new messages only).");
     return config.delay;
   }
   function setScope(value) {
-    if (!scopes.has(value)) throw new RangeError("scope: all | servers | dm");
+    if (!scopes.has(value)) throw new RangeError("Scope: all | servers | dm");
     config.scope = value;
     save();
     render();
-    notify("Область удаления: " + value + " (для новых сообщений)");
+    notify("Scope changed: " + value + " (new messages only).");
     return value;
   }
 
@@ -417,7 +502,7 @@
     document.removeEventListener("pointerup", onUp);
     host.remove();
     try { delete window[NAME]; } catch { window[NAME] = undefined; }
-    console.info("[AutoDelete] Остановлено, панель удалена.");
+    console.info("[AutoDelete] Stopped. Dashboard removed.");
   }
   el("ad-close").addEventListener("click", stop);
   const controller = {
@@ -427,7 +512,7 @@
     hide() { root.classList.add("collapsed"); },
     status() {
       const snapshot = {
-        ready: state.ready, enabled: state.enabled, error: state.error,
+        ready: state.ready, enabled: state.enabled, error: state.error, monitor: state.monitor,
         delaySeconds: config.delay, scope: config.scope, pending: state.pending.size,
         requests: state.requests, failed: state.failed, skipped: state.skipped
       };
@@ -437,7 +522,7 @@
     setDelay, setScope, pause, resume, retry: connect, stop
   };
   Object.defineProperty(window, NAME, { value: controller, configurable: true });
-  ticker = setInterval(render, 1000);
+  ticker = setInterval(() => { scanCache(); render(); }, 500);
   render();
   connect();
 })();
