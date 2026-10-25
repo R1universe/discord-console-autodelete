@@ -37,7 +37,10 @@ function makeFakeRuntime() {
   const cache = {
     10: { exports: { genericProxy } },
     20: { exports: { users } },
-    30: { exports: { messages: msg } }
+    30: { exports: { messages: msg } },
+    40: { exports: { transport: {
+      HTTP: { get() {}, post() {}, put() {}, del() {} }
+    } } }
   };
   const req = { c: cache, m: { ...cache, 1000: function lazyFactory() {} } };
   const chunk = [];
@@ -64,9 +67,15 @@ function makeFakeRuntime() {
 const { latestReport: report, logged } = makeFakeRuntime();
 assert.ok(report);
 assert.equal(report.browserRuntimeCount, 1);
-assert.equal(report.runtimes[0].initialized, 3);
-assert.equal(report.runtimes[0].availableFactories, 4);
+assert.equal(report.runtimes[0].initialized, 4);
+assert.equal(report.runtimes[0].availableFactories, 5);
 assert.equal(report.signatures.improbableCrossFamily, 1);
+assert.equal(report.auditVersion, "1.1");
+assert.ok(report.httpPropertyTypes.object >= 1);
+assert.equal(report.httpPropertyTypes.nestedObjectsWithGetPostPutDel, 1);
+assert.ok(report.httpPropertyTypes.function >= 0);
+assert.equal(report.crossFamily.threeOrMoreFamilies, 1);
+assert.equal(report.crossFamily.fiveOrMoreFamilies, 1);
 assert.ok(report.methods.deleteMessage.unstableOnRepeatedRead >= 1);
 assert.equal(report.methods.deleteMessage.ownProperties, 0);
 assert.ok(report.methods.getCurrentUser.ownProperties >= 1);
