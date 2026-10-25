@@ -1,6 +1,17 @@
-# Discord AutoDelete v3.6
+# Discord AutoDelete v3.7
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.7 — DM-first and reliable manual time entry
+
+- **DMs · deletion delay** now appears **above** **Servers · deletion delay** in the floating UI, as requested.
+- Both custom numeric fields now accept freely typed values between **2 and 86,400 seconds**. The 500ms dashboard refresh no longer overwrites partially typed numbers (including an empty field or an initial `1`).
+- Type your value and press **Enter**, or **click outside the field**, to save it. Press **Escape** to discard changes.
+- Values are validated **on commit**, not each keystroke. Invalid entries revert to the previous valid setting with an Activity Log notice.
+- Keyboard input inside those fields is isolated from Discord's global bubble-phase shortcuts where supported. The script does not override browser or Discord capture-phase hotkeys.
+- Existing presets, saved settings, timer scheduling, and deletion logic are unchanged.
+
+Automated tests replay manual typing with periodic redraws and check Enter/blur/Escape, numeric validation and the DM-first field order. **The UI fix has not yet been tested on the user's live Discord Web browser.**
 
 ## What's new in v3.6 — compact dark UI
 
