@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.9.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.10.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -274,14 +274,35 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // v3.9: scope-first, context-aware dark/green UI retains safety disclosure.
-  assert.match(source, /AutoDelete <span class="version">v3\.9<\/span>/);
+  // v3.10: graphite/glass presentation with compact diagnostics and honest metrics.
+  assert.match(source, /AutoDelete <span class="version">v3\.10<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
-  assert.match(source, /<summary>Diagnostics &amp; safety<\/summary>/,
-    "Disclosure label makes risk discoverable");
-  assert.match(source, /Unofficial account automation/,
-    "Self-bot risk must not disappear");
+  assert.match(source, /<summary>Diagnostics<\/summary>/,
+    "Disclosure retains diagnostic access without long explanatory copy");
+  assert.doesNotMatch(source, /class="diag-warning"|class="diag-metrics"|id="ad-warning"/,
+    "The two user-selected explanatory text blocks are absent from the UI");
+  assert.doesNotMatch(source, /<strong>Unofficial account automation\.<\/strong>/,
+    "Large account-risk explanation is no longer rendered in the panel");
+  assert.match(source, /Open diagnostics/,
+    "Help control remains discoverable");
+  assert.match(source, /<span>Requests<\/span>/,
+    "Attempts is relabeled Requests");
+  assert.match(source, /<span>Errors<\/span>/,
+    "Caught is relabeled Errors");
+  assert.doesNotMatch(source, /<span>Attempts<\/span>|<span>Caught<\/span>/,
+    "Obsolete counter labels are removed");
+  assert.match(source, /Deletion calls attempted; not verified server deletions/,
+    "Requests title preserves precise semantics");
+  assert.match(source, /background HTTP failures may not appear/,
+    "Errors title explicitly limits what it counts");
+  assert.match(source, /backdrop-filter:blur\(14px\)/,
+    "Subtle glass effect is applied to the overall panel");
+  assert.match(source, /background:radial-gradient/,
+    "Panel has quiet ambient futuristic lighting");
+  assert.match(source, /\.scope-switch\{[^"\n]*border:1px solid/,
+    "Scope segmented control uses one connected capsule");
+
   assert.doesNotMatch(source, /<p class="desc">/,
     "Long explanatory paragraphs removed from main panel");
   assert.doesNotMatch(source, /<div class="hint" style="text-align:center;margin-top:6px/,
@@ -345,14 +366,14 @@ function createEnvironment(options = {}) {
   assert.equal(api.status().scope, "all", "Everywhere can be reselected");
   assert.equal(dmBlock.style.display, "", "Everywhere restores DM timing");
   assert.equal(serverBlock.style.display, "", "Everywhere restores server timing");
-  assert.match(source, /\.panel\.is-active\{[^"\n]*--ad-accent:#299b68/,
+  assert.match(source, /\.panel\.is-active\{[^"\n]*--ad-accent:#35c878/,
     "Active state uses green tokens, not an always-green palette");
   assert.match(source, /\.panel\.is-active \.primary\{/,
     "Enabled button is highlighted green");
   assert.match(source, /\.panel\.is-active \.scope-btn\.selected\{/,
     "Selected scope becomes green while monitoring is active");
 
-  assert.ok(e.ids.get("ad-warning"), "Dashboard renders");
+  assert.ok(e.ids.get("ad-toggle"), "Dashboard renders without warning text blocks");
 
   assert.equal(api.resume(), true);
   assert.ok(panel.classList.contains("is-active"),
@@ -714,7 +735,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.9 scope-first conditional DM/server timers, Enable/Disable controls, dark-green theme, queues");
+  console.log("PASS: v3.10 graphite glass UI, minimal diagnostics, Requests/Errors labels, conditional timers and queue logic");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
