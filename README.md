@@ -1,6 +1,21 @@
-# Discord AutoDelete v3.9
+# Discord AutoDelete v3.10
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.10 — futuristic Discord-like graphite glass
+
+v3.10 refines the visual layer only. It uses a near-black **glass/graphite aesthetic** with an understated ambient Blurple highlight while disabled, and a restrained emerald glow while enabled. Buttons and stats use translucent gradients, fine inset edges and softer borders. The scope selector is now a single connected three-option capsule. Reduced-motion support remains available.
+
+- Dashboard counters now read **Queued / Requests / Errors**, replacing Attempts/Caught.
+  - **Queued** = live pending timers.
+  - **Requests** = delete API method calls initiated, **not** confirmed successful server deletions.
+  - **Errors** = errors caught from the invoked method, **not** all background HTTP errors. Known 404/429 behavior remains unresolved; see [Issue #2](./issues/2).
+- The two verbose explanatory paragraphs are **removed from the Diagnostics panel**. Diagnostics still contains Activity Log and Reconnect; concise counter caveats remain available as native hover titles.
+- **Account risk disclosure is maintained in this README**, not presented as a large warning block inside the compact UI. This remains unofficial Discord self-bot automation and can trigger sanctions.
+- Connection errors and limited-coverage notices remain visible when applicable.
+- Existing Delay/Scope, timer persistence, confirmation filtering and deletion logic are untouched.
+
+Automated mock tests validate the refreshed DOM/CSS markers, honest counter labels and existing functional behavior. **The new visual styling has not yet been tested in a live Discord browser session.**
 
 ## What's new in v3.9 — choose where, then choose when
 
