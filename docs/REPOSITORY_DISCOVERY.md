@@ -1,39 +1,63 @@
-# Repository discovery settings
+# GitHub repository discovery and positioning
 
-GitHub's **About** description and **Topics** are repository metadata, not README fields. They must be saved through GitHub's repository metadata editor. This file keeps the intended values ready for copying and avoids misleading claims about what the script can do.
+## Core positioning
 
-## Suggested About description
+**Discord AutoDelete — Self-Destructing Messages in Discord Web**
+
+An experimental single-file JavaScript tool for **newly sent messages**: it attempts deletion after a customizable per-message expiry timer, with **independent DM and server delays**.
+
+**Distinctive design:** live new-message observation, a floating on-page console dashboard, and reuse of existing authenticated Discord client actions **without explicitly extracting the user's token**.
+
+This is different from bulk history cleaners such as [Undiscord](https://github.com/victornpb/undiscord), which search past messages and delete matching history. **Do not claim the first-ever disappearing-message tool**: other similar approaches exist, and the uniqueness of the exact feature combination is not globally verified.
+
+## Suggested GitHub About description
+
+Copy into the repository's **About** description field:
 
 ```text
-Unofficial Discord Web auto-delete timer for your own new DM and server messages. JavaScript console dashboard with separate delays.
+Self-destructing-style messages for Discord Web: auto-delete NEW DMs and server messages by timer. JavaScript console, no token extraction. Unofficial.
 ```
 
-## Suggested Topics
+*The About description is GitHub metadata separate from README.md. Editing README does not change this field.*
+
+## Suggested GitHub Topics
 
 ```text
-discord, discord-web, javascript, discord-tools, auto-delete, message-deletion, browser-console, discord-selfbot
+discord, javascript, discord-web, browser-console, auto-delete, message-deletion, disappearing-messages, self-destructing-messages, discord-selfbots
 ```
 
-Use a small number of accurate topics; don't add unrelated trending topics. `discord-selfbot` is a candid description of the unsupported technique, **not** an endorsement of its use. Discord prohibits self-bot automation.
+Use accurate topics rather than generic trending labels; avoid unrelated tags such as `discord-webhook` if the project does not implement webhooks.
 
-## Apply manually
+The currently configured Topics may differ. Click the **gear next to About** on the repository page to add these; current GitHub connector access does not allow editing that repository metadata.
 
-1. Open [this repository](https://github.com/R1universe/discord-console-autodelete).
-2. Click the **gear icon next to About** on the right.
-3. Paste the description and add the comma-separated topics individually.
-4. Save changes and verify the Topics appear on the repository main page.
+## Search phrases to serve naturally, not keyword-stuff
 
-Repository Topics and description are not presently writable through this ChatGPT GitHub connection, so they have **not** been automatically changed.
+- Discord self-destructing messages
+- Discord disappearing messages
+- Auto-delete new Discord messages
+- Discord DM message expiration timer
+- Discord server auto-delete timer
+- Discord Web browser console JavaScript
+- Discord self-bot message deletion (with visible Discord policy warning)
 
-## What GitHub can discover
+README title, clear opening, honest screenshots, and useful docs are more important than repeating phrases.
 
-- The repository name already contains `discord`, `console`, and `autodelete`.
-- The English and Russian READMEs are concise and lead with a real UI screenshot.
-- The README uses phrases people search for naturally: Discord auto delete messages, message deletion timer, Discord DM auto-delete, and server message auto-delete.
-- The project links to an actual code file, quick-start instructions, tests, limitations and a bug-report template.
+## How to evaluate discoverability
 
-**Search appearance is not guaranteed.** GitHub indexing, ranking and Google indexing are controlled by those services.
+- Search GitHub by exact repository name, then by phrases such as `discord self-destructing messages`.
+- Compare results with similar projects, but do not equate being indexed with ranking highly.
+- Review **Insights → Traffic** if available, including visitors, referrers, and clones.
+- Google indexing can take time; results are not guaranteed or fully measurable from inside this repo.
 
-## Open-source license decision
+## Safety and reliability claims to avoid
 
-The repository is public, but no `LICENSE` was detected during review. A public repository does not automatically grant broad redistribution or modification rights. If you want others to fork and reuse this software legally, choose a license deliberately (e.g. MIT or Apache-2.0). Do **not** add a license merely for search ranking without deciding your terms first.
+- **Do not claim guaranteed or instant deletion.** A 1-second timer starts after the script detects a confirmed new message. Browser scheduling and Discord/network responses can delay or prevent deletion.
+- **Do not claim secure, private or end-to-end disappearing messages.** Other participants can preserve sent content.
+- **Do not claim Discord approval or compliance.** Self-bot automation is prohibited by Discord.
+- **Do not claim zero authorization.** The script uses the *already authenticated Discord client* but avoids explicit token extraction.
+- **Do not claim every DM/server is always monitored.** Cache-only fallback covers only the open channel.
+- **Do not claim all Requests succeeded.** The request counter measures calls, not verified completed deletions.
+
+## License decision
+
+The repository is public but its published files do not currently include a root `LICENSE`. Public visibility alone does not grant general reuse/redistribution permission. Choose an open-source license only when you are ready to authorize those rights.
