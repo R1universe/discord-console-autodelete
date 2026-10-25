@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.2.1 — experimental console prototype
+ * Discord AutoDelete v3.3 — experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.2.1";
+  const VERSION = "3.3.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -95,7 +95,7 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.2.1</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.3</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
         '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
@@ -192,10 +192,49 @@
     render();
   }
 
+  // Adapted from Vencord's shouldIgnoreValue(): Discord exports i18n
+  // Proxy values that return a function for ANY property name. These can
+  // cache the synthesized function onto themselves, producing hundreds of
+  // false candidates (see the 83 cross-family matches in audit v1.1).
+  // This guard MUST run before probing methods like deleteMessage or del.
+  const INVALID_PROXY_KEY = "is this a proxy that returns values for any key?";
+  const lookupStats = { ignored: 0, recognizedI18n: 0, arbitraryKey: 0 };
+  const ignoredExports = new WeakSet();
+  function ignoreExport(value) {
+    if (!value || (typeof value !== "object" && typeof value !== "function")) return true;
+    if (value === window || value === document || value === document.documentElement) return true;
+    if (ignoredExports.has(value)) return true;
+    try {
+      const tag = value[Symbol.toStringTag];
+      if (tag === "IntlMessagesProxy" || tag === "DOMTokenList") {
+        ignoredExports.add(value);
+        lookupStats.ignored++;
+        lookupStats.recognizedI18n++;
+        return true;
+      }
+    } catch { return true; }
+
+    // A unique probe catches other proxies with the same behaviour. Restore
+    // an *initially absent* property when the proxy caches the probe result.
+    // Avoid invoking this on known translation proxies (above).
+    try {
+      const existed = Object.prototype.hasOwnProperty.call(value, INVALID_PROXY_KEY);
+      const arbitrary = value[INVALID_PROXY_KEY];
+      if (arbitrary !== undefined && !existed) {
+        try { Reflect.deleteProperty(value, INVALID_PROXY_KEY); } catch {}
+        ignoredExports.add(value);
+        lookupStats.ignored++;
+        lookupStats.arbitraryKey++;
+        return true;
+      }
+    } catch { return true; }
+    return false;
+  }
   function addCandidates(cache) {
     const found = [], seen = new Set();
     const put = value => {
-      if (!value || (typeof value !== "object" && typeof value !== "function") || seen.has(value)) return;
+      if (!value || (typeof value !== "object" && typeof value !== "function") ||
+          seen.has(value) || ignoreExport(value)) return;
       seen.add(value);
       found.push(value);
     };
@@ -203,7 +242,7 @@
       try {
         const exported = entry?.exports;
         put(exported);
-        if (!exported) continue;
+        if (!exported || ignoreExport(exported)) continue;
         for (const key of Object.keys(exported)) {
           try { put(exported[key]); } catch {}
         }
@@ -254,7 +293,8 @@
       const special = req.c?.[73153]?.exports;
       if (special) {
         for (const item of [special, ...Object.values(special)]) {
-          if (item && (typeof item === "object" || typeof item === "function") && !seen.has(item)) {
+          if (item && (typeof item === "object" || typeof item === "function") &&
+              !seen.has(item) && !ignoreExport(item)) {
             seen.add(item);
             all.push(item);
           }
@@ -295,7 +335,9 @@
       return preferred[0] ?? wrappers[0] ?? null;
     }
 
-    const notes = {};
+    const notes = { IgnoredProxies: lookupStats.ignored +
+      " (" + lookupStats.recognizedI18n + " IntlMessagesProxy, " +
+      lookupStats.arbitraryKey + " catch-all)" };
     const userCandidates = matches(x => typeof x?.getCurrentUser === "function" && typeof x?.getUser === "function");
     const users = pick(userCandidates, storeNamed("UserStore"), "UserStore", notes);
     const actionCandidates = matches(x => typeof x?.deleteMessage === "function");
@@ -336,15 +378,24 @@
 
     // Keep legacy event discovery, but do not mistake a list of candidates
     // for proof that the real Discord gateway is connected.
-    const dispatchers = unique(matches(x => typeof x?.subscribe === "function" &&
-      typeof x?.dispatch === "function")).slice(0, 24);
-    notes.EventSources = dispatchers.length + " potential dispatchers";
+    const dispatcherMatches = unique(matches(x =>
+      typeof x?.subscribe === "function" &&
+      typeof x?.unsubscribe === "function" &&
+      typeof x?.dispatch === "function"));
+    // Avoid subscribing to every event bus in the app. If the core Dispatcher
+    // is ambiguous, rely on open-channel cache until discovery is verified.
+    const preferredDispatchers = dispatcherMatches.filter(x =>
+      x._subscriptions != null && typeof x.flushWaitQueue === "function");
+    const dispatchers = preferredDispatchers.length === 1 ?
+      preferredDispatchers : dispatcherMatches.length === 1 ? dispatcherMatches : [];
+    notes.EventSources = dispatcherMatches.length + " candidates; " +
+      dispatchers.length + " uniquely selected";
     const accountId = String(users?.getCurrentUser()?.id ?? "");
     if (users && validId(accountId) && (rest || actions) &&
         (dispatchers.length || (store && selected))) {
       return {
         users, actions, rest, messageStore: store, selectedChannel: selected,
-        channelStore: channel, dispatchers, accountId, moduleCount: all.length,
+        channelStore: channel, dispatchers, accountId, moduleCount: all.length, ignoredProxies: lookupStats.ignored,
         discovery: notes
       };
     }
@@ -486,7 +537,7 @@
         "Open-channel cache only";
       state.ready = true;
       state.enabled = false;
-      notify("Connected: " + state.monitor + ". Click Enable to start.", "good");
+      notify("Module candidates resolved: " + state.monitor + ". Not live-verified. Enable to test.", "good");
       if (!discovered.activeDispatchers.length)
         notify("Limited coverage: only the open channel is monitored.", "bad");
     } catch (err) {
