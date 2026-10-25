@@ -1,6 +1,14 @@
-# Discord AutoDelete v3.10
+# Discord AutoDelete v3.11
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.11 — symmetrical delay rows
+
+The header displays just **AutoDelete v3.11**, plus Minimize and Close. The subtitle **“Timed Discord messages”** and the header **?** help button have been removed. Diagnostics remains accessible from the footer (and from `DiscordAutoDelete.openDiagnostics()`).
+
+Each visible delay row now consists of exactly **three equally sized controls**: **custom seconds input | 4s | 60s**. Both DMs and Servers use the same grid geometry and presets. Custom input continues to accept any valid integer from **2 to 86,400 seconds**; press Enter or click outside to save. The values from previous versions are preserved, even when they do not match the 4s or 60s presets.
+
+The Where to delete selector still controls whether the DM row, Server row, or both appear. Timer scheduling, confirmation filtering, event handling and self-bot risks have not changed. Unit tests verify the new markup, presets, persistence and queue behavior. **Live Discord visual compatibility has not yet been verified for v3.11.**
 
 ## What's new in v3.10 — futuristic Discord-like graphite glass
 
