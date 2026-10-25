@@ -1,4 +1,4 @@
-# Discord AutoDelete v3 — инструкция (RU)
+# Discord AutoDelete v3.1 — инструкция (RU)
 
 **Интерфейс по умолчанию теперь английский.** Скрипт открывает плавающую панель в Discord Web, позволяет включить/приостановить автоматическое удаление своих новых сообщений и настроить задержку и область действия.
 
@@ -29,8 +29,9 @@ DiscordAutoDelete.stop()          // полное удаление панели
 
 В предыдущих версиях код требовал конкретный `FluxDispatcher`, которого текущая сборка Discord не обнаруживала — ошибка `FluxDispatcher: 0 вариантов`.
 
-В v3:
-- поиск экспортов Webpack расширен;
+В v3/v3.1:
+- поиск экспортов Webpack расширен, в v3.1 объединены модули нескольких runtime и добавлена проверка вложенного `HTTP` в экспорте с `getAPIBaseURL`;
+- вместо `REST=false` теперь показывается количество кандидатов: ранее неоднозначность ошибочно выглядела как отсутствие модуля;
 - у `FluxDispatcher` больше нет статуса обязательного компонента;
 - резервный режим читает **MessageStore в текущем открытом канале** — это ограниченный режим, **не работает глобально во всех чатах**;
 - удаление использует встроенный клиентский `RestAPI.del` (если найден) либо `MessageActions.deleteMessage`;
@@ -63,3 +64,5 @@ node test/test.js
 GitHub Actions запускает обе команды после обновлений. **Успех тестов не равен доказательству работоспособности в живом Discord.**
 
 Политика Discord: https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots
+
+Дополнительные примеры именно таймерного удаления: [Guncord timeDelete](https://github.com/o9ll/Guncord/blob/main/src/guncordplugins/timeDelete/index.tsx), [Moggcord SelfDestruct](https://github.com/caedesdev/moggcord/blob/main/src/moggcordplugins/selfDestruct/index.tsx). Это плагины модифицированного клиента, а не скрипты для обычной консоли.
