@@ -5,6 +5,9 @@
  * IMPORTANT: This script cannot and does not delete/edit/send messages.
  * It never accesses an authorization token, message body, storage, or the network.
  * It reports aggregated technical metadata about module exports only.
+ * Note: reading an exposed JS property can invoke a property getter. This script
+ * never intentionally calls any Discord API, but it cannot guarantee that
+ * arbitrary getters in the client have zero side effects.
  */
 (() => {
   "use strict";
@@ -72,6 +75,21 @@
     unstableOnRepeatedRead: 0
   }]));
   const uniques = Object.fromEntries(fields.map(key => [key, new Set()]));
+  // The previous audit incorrectly treated HTTP only as a function.
+  // Real HTTP transports may be objects. Count this property separately.
+  const httpPropertyTypes = {
+    absent: 0, nullish: 0, function: 0, object: 0, other: 0,
+    nestedObjectsWithGetDel: 0, nestedObjectsWithGetPostPutDel: 0,
+    nestedFunctionsWithGetDel: 0
+  };
+  const crossFamily = {
+    userAndRest: 0,
+    userAndMessageActions: 0,
+    messageStoreAndRest: 0,
+    actionsAndRest: 0,
+    threeOrMoreFamilies: 0,
+    fiveOrMoreFamilies: 0
+  };
   const signatures = {
     userStoreLike: 0, messageActionsLike: 0, restLike: 0,
     messageStoreLike: 0, selectedChannelLike: 0, dispatcherLike: 0,
@@ -80,6 +98,28 @@
 
   for (const obj of objects) {
     const flags = {};
+    let http;
+    let httpOwn = false;
+    try {
+      httpOwn = Object.prototype.hasOwnProperty.call(obj, "HTTP");
+      if (httpOwn) http = obj.HTTP;
+    } catch {}
+    if (!httpOwn) httpPropertyTypes.absent++;
+    else if (http == null) httpPropertyTypes.nullish++;
+    else if (typeof http === "function") httpPropertyTypes.function++;
+    else if (typeof http === "object") httpPropertyTypes.object++;
+    else httpPropertyTypes.other++;
+    if (http && (typeof http === "object" || typeof http === "function")) {
+      try {
+        const httpMethods = ["get", "post", "put", "del"].map(key => typeof http[key] === "function");
+        if (httpMethods[0] && httpMethods[3]) {
+          if (typeof http === "function") httpPropertyTypes.nestedFunctionsWithGetDel++;
+          else httpPropertyTypes.nestedObjectsWithGetDel++;
+        }
+        if (httpMethods.every(Boolean) && typeof http === "object")
+          httpPropertyTypes.nestedObjectsWithGetPostPutDel++;
+      } catch {}
+    }
     for (const field of fields) {
       let first, second;
       try {
@@ -111,18 +151,28 @@
     if (messages) signatures.messageStoreLike++;
     if (selected) signatures.selectedChannelLike++;
     if (flux) signatures.dispatcherLike++;
-    if ([user, actions, rest, messages, selected].filter(Boolean).length >= 3)
+    if (user && rest) crossFamily.userAndRest++;
+    if (user && actions) crossFamily.userAndMessageActions++;
+    if (messages && rest) crossFamily.messageStoreAndRest++;
+    if (actions && rest) crossFamily.actionsAndRest++;
+    const familyCount = [user, actions, rest, messages, selected].filter(Boolean).length;
+    if (familyCount >= 3) {
       signatures.improbableCrossFamily++;
+      crossFamily.threeOrMoreFamilies++;
+    }
+    if (familyCount >= 5) crossFamily.fiveOrMoreFamilies++;
   }
   for (const key of fields) summary[key].distinctReferences = uniques[key].size;
 
   // No user IDs, tokens, channel/message IDs, usernames or source code included.
   const result = Object.freeze({
-    auditVersion: "1.0",
+    auditVersion: "1.1",
     browserRuntimeCount: reqs.length,
     runtimes: runtimeModules,
     inspectedExportObjects: objects.length,
     signatures,
+    crossFamily,
+    httpPropertyTypes,
     methods: Object.fromEntries(
       Object.entries(summary).filter(([, info]) => info.functions > 0)
     ),
