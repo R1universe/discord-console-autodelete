@@ -77,7 +77,6 @@ Deletion can fail due to client changes, network conditions, permission issues o
 
 Automated tests run against **mocked Discord runtime behavior**, not the live Discord API. Discord updates can break the tool without warning.
 
-- [Russian guide / Инструкция на русском](./README_RU.md)
 - [Manual QA checklist](./QA_TEST_PLAN.md)
 - [Automated test source](./test/test.js)
 - [Issues and known limitations](https://github.com/R1universe/discord-console-autodelete/issues)
