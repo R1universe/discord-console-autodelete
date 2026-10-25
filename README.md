@@ -102,3 +102,15 @@ Mocked tests cover multiple runtimes, named exports, safe default, event monitor
 ### Current test status
 
 Version 3.2 passed GitHub Actions checks using mocks, including regression cases with 83 duplicated REST exports, duplicated MessageActions, and genuinely ambiguous deletion functions. **This is not a live Discord test.** If the UI still says ERROR, note the module candidate counts shown in the panel; do not share or extract an authorization token.
+
+### Audit v1.1 (HTTP shape correction)
+
+A user's first read-only report inspected 52,606 exported objects across two Webpack runtimes. It showed 83 distinct `HTTP` **functions**, each stable under repeated reads and reported as an own property. **The v1.0 audit only counted function-valued `HTTP` fields**, accidentally excluding object-valued `HTTP` transports. The data do not prove there are 83 usable Discord REST clients.
+
+The new v1.1 diagnostic adds `httpPropertyTypes` (object vs function and nested method signatures) plus `crossFamily` (overlap of unrelated client-module traits). It performs no explicit network requests, reads no messages and never retrieves credentials; reading a JS property can still trigger a getter in the host app. Paste the complete, aggregated report from v1.1, not screenshots cut off at the bottom.
+
+```js
+copy(JSON.stringify(window.AutoDeleteAuditReport, null, 2))
+```
+
+The command copies the aggregated diagnostic object created by the audit, **not** a user token or message content.
