@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.8.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.9.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -274,8 +274,8 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // v3.8: compact dark / green state-dependent UI retains safety disclosure.
-  assert.match(source, /AutoDelete <span class="version">v3\.8<\/span>/);
+  // v3.9: scope-first, context-aware dark/green UI retains safety disclosure.
+  assert.match(source, /AutoDelete <span class="version">v3\.9<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics &amp; safety<\/summary>/,
@@ -308,9 +308,20 @@ function createEnvironment(options = {}) {
   assert.match(source, /class="scope-switch" role="group"/,
     "Scope segmented control remains labelled");
   const toggleIndex = source.indexOf('id="ad-toggle"');
-  const dmIndex = source.indexOf('<label for="ad-dm-delay">');
-  assert.ok(toggleIndex > 0 && toggleIndex < dmIndex,
-    "Primary Enable/Pause action is above the DM and Server timer controls");
+  const scopeIndex = source.indexOf('id="ad-scope-label"');
+  const dmIndex = source.indexOf('id="ad-dm-block"');
+  const serverIndex = source.indexOf('id="ad-server-block"');
+  const statIndex = source.indexOf('id="ad-pending"');
+  assert.ok(toggleIndex > 0 && toggleIndex < scopeIndex &&
+    scopeIndex < dmIndex && dmIndex < serverIndex && serverIndex < statIndex,
+    "UI order: Enable/Disable → Where to delete → DMs → Servers → Counters");
+  const dmBlock = e.ids.get("ad-dm-block");
+  const serverBlock = e.ids.get("ad-server-block");
+  assert.equal(dmBlock.style.display, "", "Everywhere shows DM timing");
+  assert.equal(serverBlock.style.display, "", "Everywhere shows server timing");
+  assert.equal(e.ids.get("ad-toggle").textContent, "Enable",
+    "Paused primary control uses one-word label");
+  assert.match(e.ids.get("ad-toggle").getAttribute("title"), /Enable auto-delete/);
   const panel = e.ids.get("ad-panel");
   assert.ok(!panel.classList.contains("is-active"), "Default paused panel stays black");
   assert.ok(!panel.classList.contains("is-error"), "No false error glow");
@@ -320,14 +331,20 @@ function createEnvironment(options = {}) {
     ["true","false","false"], "Everywhere default has a single active scope");
   scope[1].dispatch("click");
   assert.equal(api.status().scope, "servers", "Clicking Servers changes scope");
+  assert.equal(dmBlock.style.display, "none", "Servers hides DM timing");
+  assert.equal(serverBlock.style.display, "", "Servers shows server timing");
   assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
     ["false","true","false"], "Selected scope is visually and accessibly exclusive");
   scope[2].dispatch("click");
   assert.equal(api.status().scope, "dm", "Clicking DMs changes scope");
+  assert.equal(dmBlock.style.display, "", "DMs shows DM timing");
+  assert.equal(serverBlock.style.display, "none", "DMs hides server timing");
   assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
     ["false","false","true"]);
   scope[0].dispatch("click");
   assert.equal(api.status().scope, "all", "Everywhere can be reselected");
+  assert.equal(dmBlock.style.display, "", "Everywhere restores DM timing");
+  assert.equal(serverBlock.style.display, "", "Everywhere restores server timing");
   assert.match(source, /\.panel\.is-active\{[^"\n]*--ad-accent:#299b68/,
     "Active state uses green tokens, not an always-green palette");
   assert.match(source, /\.panel\.is-active \.primary\{/,
@@ -340,7 +357,7 @@ function createEnvironment(options = {}) {
   assert.equal(api.resume(), true);
   assert.ok(panel.classList.contains("is-active"),
     "Resume enables green theme across the panel");
-  assert.equal(e.ids.get("ad-toggle").textContent, "Pause · clear queue",
+  assert.equal(e.ids.get("ad-toggle").textContent, "Disable",
     "Primary button communicates active state without status row");
   e.post("555555555555555555", "999999999999999999");
   assert.equal(api.status().pending, 0, "Ignore other people");
@@ -352,6 +369,12 @@ function createEnvironment(options = {}) {
 
   api.setDelay(30);
   api.setScope("dm");
+  assert.equal(dmBlock.style.display, "", "Programmatic setScope shows relevant DM control");
+  assert.equal(serverBlock.style.display, "none", "Programmatic setScope hides irrelevant server control");
+  api.setDmDelay(45);
+  assert.equal(api.status().serverDelaySeconds, 30, "Hidden server delay retains its own value");
+  assert.equal(api.status().dmDelaySeconds, 45, "DM delay remains independently editable");
+  api.setDmDelay(30);
   assert.equal(api.status().serverDelaySeconds, 30);
   assert.equal(api.status().dmDelaySeconds, 30);
   e.post("666666666666666666", e.account.id, "444444444444444444");
@@ -362,7 +385,7 @@ function createEnvironment(options = {}) {
   api.pause();
   assert.ok(!panel.classList.contains("is-active"),
     "Pause restores neutral black palette");
-  assert.equal(e.ids.get("ad-toggle").textContent, "Enable auto-delete");
+  assert.equal(e.ids.get("ad-toggle").textContent, "Enable");
   assert.equal(api.status().pending, 0);
   assert.equal(e.timers.size, 0, "Pause cancels timers");
 
@@ -691,7 +714,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.8 black-green active theme, segmented scope controls, top CTA, timer editing, safety and queues");
+  console.log("PASS: v3.9 scope-first conditional DM/server timers, Enable/Disable controls, dark-green theme, queues");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
