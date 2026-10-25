@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.1.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -105,14 +105,30 @@ function createEnvironment(options = {}) {
   const native = { c: {
     ...(options.withoutDispatcher ? {} : { one: { exports: { A: dispatcher } } }),
     two: { exports: { B: users } },
-    three: { exports: { C: options.withRestOnly ? rest : actions } },
+    ...(options.withNestedRest ? {} : {
+      three: { exports: { C: options.withRestOnly ? rest : actions } }
+    }),
+    ...(options.withNestedRest && !options.splitRest ? {
+      seven: { exports: { restOuter: {
+        getAPIBaseURL() { return "https://discord.com/api/v9"; },
+        HTTP: rest
+      } } }
+    } : {}),
     ...(options.withMessageStore ? {
       five: { exports: { E: messageStore } },
       six: { exports: { F: selectedChannel } }
     } : {}),
     four: { exports: { D: channels } }
   } };
-  const sentry = { c: { one: { exports: { irrelevant: {} } } } };
+  const sentry = { c: {
+    one: { exports: { irrelevant: {} } },
+    ...(options.withNestedRest && options.splitRest ? {
+      two: { exports: { httpWrapper: {
+        getAPIBaseURL() { return "https://discord.com/api/v9"; },
+        HTTP: rest
+      } } }
+    } : {})
+  } };
   const chunks = [];
   chunks.push = function(entry) {
     Array.prototype.push.call(chunks, entry);
@@ -217,7 +233,31 @@ function createEnvironment(options = {}) {
   assert.equal(fallback.status().pending, 0, "Does not reschedule same message");
   fallback.stop();
 
-  assert.equal(/[^\x00-\x7F]*Временные сообщения/.test(source), false, "English-first interface");
+  const e3 = createEnvironment({
+    withoutDispatcher: true, withMessageStore: true,
+    withRestOnly: true, withNestedRest: true, splitRest: true
+  });
+  vm.runInContext(source, e3.context, { timeout: 3000 });
+  const split = e3.window.DiscordAutoDelete;
+  assert.equal(split.connected, true, "Cross-runtime nested HTTP API resolved");
+  assert.equal(split.running, false, "No implicit delete in fallback");
+  split.resume();
+  e3.cached.push({
+    id: "555555555555555555",
+    author: { id: e3.account.id },
+    channel_id: "444444444444444444",
+    guild_id: "222222222222222222"
+  });
+  e3.tick();
+  await e3.flushTimers();
+  assert.deepEqual(
+    e3.restURLs,
+    ["/channels/444444444444444444/messages/555555555555555555"],
+    "Nested HTTP transport performs the request"
+  );
+  split.stop();
+
+  assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
   console.log("PASS: modules, safe default, cache fallback, REST, queue, scopes, account switch, English UI");
 })().catch(err => {
   console.error(err);
