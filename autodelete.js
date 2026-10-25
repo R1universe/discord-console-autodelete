@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "2.0.0";
+  const VERSION = "3.0.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -95,31 +95,31 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v2</span></h1><div class="muted">Временные сообщения Discord</div></div></div>',
-          '<div class="head-buttons"><button class="mini" id="ad-min" title="Свернуть" aria-label="Свернуть">−</button><button class="mini" id="ad-close" title="Остановить и закрыть" aria-label="Закрыть">×</button></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="head-buttons"><button class="mini" id="ad-min" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
-        '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">ПОДКЛЮЧЕНИЕ</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
+        '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
       '</div>',
       '<div class="body">',
-        '<p class="desc">Автоматически удаляет только твои новые сообщения. Сначала выбери настройки и включи функцию.</p>',
-        '<div class="warning" id="ad-warning">Неофициальная автоматизация аккаунта: Discord может ограничить или заблокировать аккаунт.</div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-delay">Задержка удаления</label><span class="hint">2–86400 сек.</span></div>',
-          '<div class="delay"><input class="value" id="ad-delay" type="number" min="2" max="86400" step="1" aria-label="Задержка в секундах"><div class="presets">',
+        '<p class="desc">Automatically delete your own new messages. Choose settings, then enable monitoring.</p>',
+        '<div class="warning" id="ad-warning">Unofficial account automation can lead to a Discord suspension or ban.</div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-delay">Deletion delay</label><span class="hint">2–86400 sec</span></div>',
+          '<div class="delay"><input class="value" id="ad-delay" type="number" min="2" max="86400" step="1" aria-label="Delay in seconds"><div class="presets">',
           '<button class="preset" data-delay="5">5s</button><button class="preset" data-delay="10">10s</button><button class="preset" data-delay="30">30s</button><button class="preset" data-delay="60">60s</button>',
         '</div></div></div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-scope">Где удалять</label><span class="hint">Только мои сообщения</span></div>',
-          '<select id="ad-scope"><option value="all">Везде: серверы и DM</option><option value="servers">Только серверы</option><option value="dm">Только DM и групповые DM</option></select></div>',
-        '<button class="primary" id="ad-toggle" disabled>Проверка подключения…</button>',
-        '<button class="reconnect" id="ad-retry" style="display:none">Повторить подключение</button>',
-        '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>В очереди</span></div>',
-        '<div class="stat"><strong id="ad-requests">0</strong><span>Запросов</span></div>',
-        '<div class="stat"><strong id="ad-failed">0</strong><span>Ошибок</span></div></div>',
-        '<div class="next" id="ad-next">Нет запланированных удалений</div>',
-        '<div class="logs"><div class="logshead">ЖУРНАЛ <span class="hint">Без текста сообщений</span></div><div class="loglist" id="ad-logs" aria-live="polite"></div></div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-scope">Where to delete</label><span class="hint">Your messages only</span></div>',
+          '<select id="ad-scope"><option value="all">Everywhere: servers and DMs</option><option value="servers">Servers only</option><option value="dm">DMs and group DMs only</option></select></div>',
+        '<button class="primary" id="ad-toggle" disabled>Checking connection…</button>',
+        '<button class="reconnect" id="ad-retry" style="display:none">Retry connection</button>',
+        '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
+        '<div class="stat"><strong id="ad-requests">0</strong><span>Requests</span></div>',
+        '<div class="stat"><strong id="ad-failed">0</strong><span>Errors</span></div></div>',
+        '<div class="next" id="ad-next">No scheduled deletions</div>',
+        '<div class="logs"><div class="logshead">ACTIVITY LOG <span class="hint">No message content recorded</span></div><div class="loglist" id="ad-logs" aria-live="polite"></div></div>',
       '</div>',
-      '<div class="footer"><span>Настройки сохраняются локально</span><button id="ad-retry-foot">Диагностика ↻</button></div>',
+      '<div class="footer"><span>Settings saved locally</span><button id="ad-retry-foot">Reconnect ↻</button></div>',
     '</section>',
-    '<button id="ad-pill" class="pill" type="button" aria-label="Открыть AutoDelete"><span>◷</span><span id="ad-pill-text">AutoDelete · Выкл.</span></button>'
+    '<button id="ad-pill" class="pill" type="button" aria-label="Open AutoDelete"><span>◷</span><span id="ad-pill-text">AutoDelete · Off</span></button>'
   ].join("");
   shadow.appendChild(root);
   const el = id => shadow.getElementById(id);
@@ -149,14 +149,14 @@
 
   function render() {
     if (state.destroyed) return;
-    const mode = state.error ? "ERROR" : !state.ready ? "ПОДКЛЮЧЕНИЕ" : state.enabled ? "АКТИВЕН" : "ПАУЗА";
+    const mode = state.error ? "ERROR" : !state.ready ? "CONNECTING" : state.enabled ? "ACTIVE" : "PAUSED";
     el("ad-state").textContent = mode;
     el("ad-dot").className = "dot " + (state.error ? "error" : state.enabled ? "active" : "paused");
     el("ad-warning").className = "warning" + (state.error ? " error" : "");
     el("ad-warning").textContent = state.error ?
-      "Подключение не удалось: " + state.error : "Self-bot нарушает правила Discord. Удаление не гарантировано; сообщения могут сохраниться у других.";
+      "Connection failed: " + state.error : "Self-bots violate Discord's rules. Deletion is not guaranteed and other users may retain copies.";
     el("ad-toggle").disabled = !state.ready;
-    el("ad-toggle").textContent = state.enabled ? "Пауза · отменить очередь" : "Включить автоудаление";
+    el("ad-toggle").textContent = state.enabled ? "Pause · clear queue" : "Enable auto-delete";
     el("ad-toggle").className = "primary" + (state.enabled ? " stop" : "");
     el("ad-retry").style.display = state.ready ? "none" : "block";
     el("ad-delay").value = config.delay;
@@ -170,9 +170,9 @@
     const jobs = [...state.pending.values()];
     const next = jobs.length ? Math.min(...jobs.map(job => job.deadline)) : 0;
     el("ad-next").textContent = next ?
-      "Следующее удаление через " + Math.max(0, Math.ceil((next - Date.now()) / 1000)) + " сек." :
-      "Нет запланированных удалений";
-    el("ad-pill-text").textContent = "AutoDelete · " + (state.enabled ? "Активен" : state.error ? "Ошибка" : "Пауза");
+      "Next deletion in " + Math.max(0, Math.ceil((next - Date.now()) / 1000)) + " sec." :
+      "No scheduled deletions";
+    el("ad-pill-text").textContent = "AutoDelete · " + (state.enabled ? "Active" : state.error ? "Error" : "Paused");
   }
 
   function cancel(id) {
@@ -216,7 +216,7 @@
       try { return preference?.(item); } catch { return false; }
     });
     const options = preferred.length === 1 ? preferred : matches.length === 1 ? matches : [];
-    if (options.length !== 1) throw new Error(displayName + ": " + matches.length + " вариантов; безопасный выбор невозможен");
+    if (options.length !== 1) throw new Error(displayName + ": " + matches.length + " candidates; cannot select safely");
     return options[0];
   }
   const storeNamed = name => obj => {
