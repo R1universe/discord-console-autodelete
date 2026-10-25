@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a reproducible problem with AutoDelete, without sharing sensitive account information.
+title: "[Bug] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the project. This is an unofficial browser-console experiment; Discord can change its internal APIs at any time.
+
+        **Never post tokens, cookies, authorization headers, private messages, or real user/channel/message IDs.**
+        Self-bot automation violates Discord's rules. Avoid repeated tests that may trigger rate limits.
+  - type: input
+    id: version
+    attributes:
+      label: AutoDelete version
+      description: The version shown in the dashboard (for example v3.13).
+      placeholder: v3.13
+    validations:
+      required: true
+  - type: dropdown
+    id: problem
+    attributes:
+      label: Problem area
+      options:
+        - Dashboard / styling
+        - Timer setting or scope
+        - Connection / module discovery
+        - Queuing / duplicate events
+        - Deletion request error
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use placeholders instead of private identifiers or message content.
+      placeholder: |
+        1. Open Discord Web...
+        2. Run reviewed AutoDelete source...
+        3. Choose ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Summarize errors without copying credentials, identifiers or message contents.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser / operating system
+      placeholder: Chrome 155 / macOS, etc.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed tokens, cookies, message text, account IDs and other private identifiers.
+          required: true
