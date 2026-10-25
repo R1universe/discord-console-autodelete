@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v2 — interactive console experiment
+ * Discord AutoDelete v3.2.1 — experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.2.0";
+  const VERSION = "3.2.1";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -95,7 +95,7 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.1</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.2.1</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
         '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
@@ -359,7 +359,9 @@
     const type = channel?.type;
     const direct = type === 1 || type === 3;
     const guild = Boolean(msg.guild_id ?? msg.guildId ?? channel?.guild_id ?? channel?.guildId);
-    if (config.scope === "dm") return direct || (!guild && !channel);
+    // Missing channel metadata is not evidence that the message is a DM.
+    // Fail closed: never delete in DM-only mode when origin is unknown.
+    if (config.scope === "dm") return direct;
     return guild && !direct;
   }
   function onCreate(event) {
