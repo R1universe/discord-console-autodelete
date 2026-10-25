@@ -10,7 +10,7 @@ const imagePath = path.join(root, "assets", "autodelete-active.webp");
 const screenshot = fs.readFileSync(imagePath);
 
 assert.ok(en.startsWith("# Discord AutoDelete"), "English landing page title");
-assert.match(en, /Discord auto delete messages/i, "search terms describe the project");
+assert.match(en, /Discord AutoDelete.*Timed Message Deletion/i, "Title clearly describes the project");
 assert.match(en, /assets\/autodelete-active\.webp/, "English landing page shows UI screenshot");
 assert.match(ru, /assets\/autodelete-active\.webp/, "Russian guide shows UI screenshot");
 assert.ok(screenshot.length > 2000, "Screenshot is nonempty and more than a placeholder");
