@@ -10,9 +10,9 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.11.0";
+  const VERSION = "3.12.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
-  const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
+  const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
 
   if (window[NAME]?.open) {
@@ -110,7 +110,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.11</span></h1></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.12</span></h1></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -125,11 +125,11 @@
             '<button type="button" class="scope-btn" data-scope="servers" aria-pressed="false">Servers</button>',
             '<button type="button" class="scope-btn" data-scope="dm" aria-pressed="false">DMs</button>',
           '</div></div>',
-        '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2s–24h</span></div>',
+        '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">1s–24h</span></div>',
           '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
           '<button class="preset" data-delay-for="dm" data-delay="4">4s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
         '</div></div></div>',
-        '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2s–24h</span></div>',
+        '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">1s–24h</span></div>',
           '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
           '<button class="preset" data-delay-for="servers" data-delay="4">4s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
         '</div></div></div>',
@@ -643,7 +643,7 @@
     return true;
   }
   function updateDelay(kind, value) {
-    if (!validDelay(value)) throw new RangeError("Delay must be an integer from 2 to 86400 seconds.");
+    if (!validDelay(value)) throw new RangeError("Delay must be an integer from 1 to 86400 seconds.");
     const seconds = Number(value);
     if (kind === "servers") config.serverDelay = seconds;
     else if (kind === "dm") config.dmDelay = seconds;
@@ -657,7 +657,7 @@
   function setDmDelay(seconds) { return updateDelay("dm", seconds); }
   // Legacy command: sets both delays, keeping older console workflows working.
   function setDelay(seconds) {
-    if (!validDelay(seconds)) throw new RangeError("Delay must be an integer from 2 to 86400 seconds.");
+    if (!validDelay(seconds)) throw new RangeError("Delay must be an integer from 1 to 86400 seconds.");
     config.serverDelay = config.dmDelay = Number(seconds);
     save();
     render();
@@ -689,7 +689,7 @@
         if (seconds !== selectedDelay()) updateDelay(kind, seconds);
         else render();
       } else {
-        notify("Enter a whole number between 2 and 86400 seconds.", "bad");
+        notify("Enter a whole number between 1 and 86400 seconds.", "bad");
         input.value = String(selectedDelay());
         render();
       }
