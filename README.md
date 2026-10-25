@@ -1,6 +1,20 @@
-# Discord AutoDelete v3.12
+# Discord AutoDelete v3.13
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.13 — truly minimize to nothing
+
+The header **−** button now completely hides the floating overlay. It no longer replaces the interface with the large `AutoDelete · Paused` / `AutoDelete · Active` pill. **Nothing remains on-screen.**
+
+- **Minimize (−)** — hide the entire overlay via `host.style.display = "none"`. Monitoring, in-memory timer queue, and settings are **unchanged**; if auto-delete was enabled it can still delete messages while hidden.
+- **Reopen** — run `DiscordAutoDelete.open()` in the Discord Web browser console. Alternatively **paste the same inspected script again into the same tab**; it detects the existing controller and reopens the original panel without installing another one.
+- **Open Diagnostics** — `DiscordAutoDelete.openDiagnostics()` also restores the panel and opens the log.
+- **Disable** — stop monitoring and cancel pending timers. **Close (×)** — stop, detach listeners and remove the script's overlay. **Browser refresh** — the console script and queue do not persist.
+- No floating pill, badge or small hidden-position click target is created on minimize.
+
+**Note:** The existing console-script automation remains unsupported by Discord. Minimize does **not** mean Disable; to stop deletion, click Disable **before** minimizing or reopen with `DiscordAutoDelete.open()` and then Disable.
+
+Mock-based regression tests verify that clicking Minimize fully hides the host, active monitoring and pending jobs survive minimization, and console reopening and diagnostics restore the full panel. This is not a live Discord compatibility guarantee.
 
 ## What's new in v3.12 — transparent Apple × Discord glass
 
