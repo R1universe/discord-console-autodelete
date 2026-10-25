@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.0.0";
+  const VERSION = "3.1.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -95,7 +95,7 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.1</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
         '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
@@ -237,60 +237,96 @@
       }]);
       if (chunk.at(-1)?.[0]?.[0] === marker) chunk.pop();
     } catch (err) {
-      throw new Error("Unable to inspect module registry: " + String(err?.message ?? err));
+      throw new Error("Unable to inspect modules: " + String(err?.message ?? err));
     }
-    runtimes.sort((a, b) => Object.keys(b.c).length - Object.keys(a.c).length);
-    if (!runtimes.length) throw new Error("No Webpack module cache was found.");
+    if (!runtimes.length) throw new Error("No Webpack runtime found.");
 
-    const diagnostics = [];
+    // Pool all caches: requiring UserStore and REST to live in the same runtime
+    // is another brittle assumption. Deduplicate candidates by object identity.
+    const all = [], seen = new Set();
     for (const req of runtimes) {
-      const items = addCandidates(req.c);
-      // Some builds export the active Dispatcher via a minified property of this module.
-      const known = req.c?.[73153]?.exports;
-      if (known) {
-        for (const value of Object.values(known)) if (!items.includes(value)) items.push(value);
+      for (const item of addCandidates(req.c)) {
+        if (seen.has(item)) continue;
+        seen.add(item);
+        all.push(item);
       }
-      function pick(predicate, preference) {
-        const matches = items.filter(x => { try { return predicate(x); } catch { return false; } });
-        if (!matches.length) return null;
-        const preferred = matches.filter(x => { try { return preference?.(x); } catch { return false; } });
-        return preferred.length === 1 ? preferred[0] : matches.length === 1 ? matches[0] : null;
+      // Optional hint from older versions. Never assume a fixed module ID.
+      const special = req.c?.[73153]?.exports;
+      if (special) {
+        for (const item of [special, ...Object.values(special)]) {
+          if (item && (typeof item === "object" || typeof item === "function") && !seen.has(item)) {
+            seen.add(item);
+            all.push(item);
+          }
+        }
       }
-      const users = pick(x => typeof x?.getCurrentUser === "function" &&
-        typeof x?.getUser === "function", storeNamed("UserStore"));
-      const actions = pick(x => typeof x?.deleteMessage === "function",
-        x => typeof x.startEditMessage === "function" || typeof x.editMessage === "function");
-      const rest = pick(x => typeof x?.del === "function" &&
-        typeof x?.get === "function" && typeof x?.post === "function",
-        x => typeof x.patch === "function" && typeof x.put === "function");
-      const store = pick(x => typeof x?.getMessages === "function" &&
-        typeof x?.getMessage === "function", storeNamed("MessageStore"));
-      const selected = pick(x => typeof x?.getChannelId === "function",
-        storeNamed("SelectedChannelStore"));
-      const channel = pick(x => typeof x?.getChannel === "function" &&
-        (typeof x?.getDMFromUserId === "function" || typeof x?.getChannels === "function"),
-        storeNamed("ChannelStore"));
-
-      // No undocumented/private property is required on a Dispatcher candidate:
-      // other projects confirm that some current builds expose only subscribe+dispatch.
-      const dispatchers = items.filter(x => {
-        try { return typeof x?.subscribe === "function" && typeof x?.dispatch === "function"; }
-        catch { return false; }
-      }).filter((item, idx, arr) => arr.indexOf(item) === idx).slice(0, 24);
-      const accountId = String(users?.getCurrentUser()?.id ?? "");
-      const canObserve = dispatchers.length > 0 || (store && selected);
-      if (users && validId(accountId) && (actions || rest) && canObserve) {
-        return {
-          users, actions, rest, messageStore: store, selectedChannel: selected,
-          channelStore: channel, dispatchers, accountId, moduleCount: items.length
-        };
-      }
-      diagnostics.push("cache=" + items.length + " user=" + !!users +
-        " actions=" + !!actions + " REST=" + !!rest +
-        " eventSources=" + dispatchers.length + " messageStore=" + !!store +
-        " selected=" + !!selected);
     }
-    throw new Error("Required internal modules not found. " + diagnostics.join("; "));
+
+    function matches(predicate) {
+      return all.filter(x => { try { return Boolean(predicate(x)); } catch { return false; } });
+    }
+    function unique(xs) { return [...new Set(xs)]; }
+    function pick(pool, prefer, label, notes) {
+      const preferred = unique(pool.filter(x => { try { return Boolean(prefer?.(x)); } catch { return false; } }));
+      const chosen = preferred.length === 1 ? preferred[0] : pool.length === 1 ? pool[0] : null;
+      notes[label] = pool.length + " candidates" + (preferred.length ? " (" + preferred.length + " preferred)" : "");
+      return chosen;
+    }
+
+    const notes = {};
+    const userCandidates = matches(x => typeof x?.getCurrentUser === "function" && typeof x?.getUser === "function");
+    const users = pick(userCandidates, storeNamed("UserStore"), "UserStore", notes);
+    const actionCandidates = matches(x => typeof x?.deleteMessage === "function");
+    const actions = pick(actionCandidates,
+      x => typeof x?.startEditMessage === "function" || typeof x?.editMessage === "function",
+      "MessageActions", notes);
+
+    // Equicord and other Vencord-derived code discovers getAPIBaseURL and
+    // returns mod.HTTP ?? mod. The HTTP transport can live one level DEEPER
+    // than the object exporting getAPIBaseURL (the v3 search missed it).
+    const httpSignatures = x => x && typeof x.del === "function" && typeof x.get === "function";
+    const restDirect = matches(x => httpSignatures(x));
+    const restFromWrappers = [];
+    const wrappers = matches(x => typeof x?.getAPIBaseURL === "function");
+    for (const wrapper of wrappers) {
+      try {
+        if (httpSignatures(wrapper?.HTTP)) restFromWrappers.push(wrapper.HTTP);
+      } catch {}
+    }
+    // A REST transport exposed with getAPIBaseURL itself is preferred.
+    const taggedDirect = restDirect.filter(x => typeof x.getAPIBaseURL === "function");
+    const restCandidates = unique([...restFromWrappers, ...taggedDirect, ...restDirect]);
+    const explicitlyTagged = unique([...restFromWrappers, ...taggedDirect]);
+    const rest = explicitlyTagged.length === 1 ? explicitlyTagged[0] :
+      explicitlyTagged.length === 0 && restCandidates.length === 1 ? restCandidates[0] : null;
+    notes.RestAPI = restCandidates.length + " candidates; " +
+      wrappers.length + " getAPIBaseURL wrappers; " + explicitlyTagged.length + " tagged transports";
+
+    const store = pick(matches(x => typeof x?.getMessages === "function" &&
+      typeof x?.getMessage === "function"), storeNamed("MessageStore"), "MessageStore", notes);
+    const selected = pick(matches(x => typeof x?.getChannelId === "function"),
+      storeNamed("SelectedChannelStore"), "SelectedChannelStore", notes);
+    const channel = pick(matches(x => typeof x?.getChannel === "function" &&
+      (typeof x?.getDMFromUserId === "function" || typeof x?.getChannels === "function")),
+      storeNamed("ChannelStore"), "ChannelStore", notes);
+
+    // Keep legacy event discovery, but do not mistake a list of candidates
+    // for proof that the real Discord gateway is connected.
+    const dispatchers = unique(matches(x => typeof x?.subscribe === "function" &&
+      typeof x?.dispatch === "function")).slice(0, 24);
+    notes.EventSources = dispatchers.length + " potential dispatchers";
+    const accountId = String(users?.getCurrentUser()?.id ?? "");
+    if (users && validId(accountId) && (rest || actions) &&
+        (dispatchers.length || (store && selected))) {
+      return {
+        users, actions, rest, messageStore: store, selectedChannel: selected,
+        channelStore: channel, dispatchers, accountId, moduleCount: all.length,
+        discovery: notes
+      };
+    }
+    throw new Error("Required modules unresolved. " +
+      Object.entries(notes).map(([k,v]) => k + "=" + v).join("; ") +
+      "; caches=" + runtimes.length);
   }
 
   function scopeMatches(msg, channelId) {
