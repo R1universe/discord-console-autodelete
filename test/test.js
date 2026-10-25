@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.10.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.11.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -40,7 +40,7 @@ let shadow;
 function createEnvironment(options = {}) {
   const ids = new Map();
   const presets = ["servers", "dm"].flatMap(kind =>
-    ["5", "10", "30", "60"].map(delay => {
+    ["4", "60"].map(delay => {
       const e = fakeElement();
       e.dataset.delay = delay;
       e.dataset.delayFor = kind;
@@ -274,8 +274,8 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // v3.10: graphite/glass presentation with compact diagnostics and honest metrics.
-  assert.match(source, /AutoDelete <span class="version">v3\.10<\/span>/);
+  // v3.11: compact header and symmetric three-part delay controls.
+  assert.match(source, /AutoDelete <span class="version">v3\.11<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -284,8 +284,10 @@ function createEnvironment(options = {}) {
     "The two user-selected explanatory text blocks are absent from the UI");
   assert.doesNotMatch(source, /<strong>Unofficial account automation\.<\/strong>/,
     "Large account-risk explanation is no longer rendered in the panel");
-  assert.match(source, /Open diagnostics/,
-    "Help control remains discoverable");
+  assert.doesNotMatch(source, /Timed Discord messages|id="ad-help"|el\("ad-help"\)/,
+    "Header subtitle and '?' help button must be absent");
+  assert.match(source, /<summary>Diagnostics<\/summary>/,
+    "Footer still exposes diagnostics");
   assert.match(source, /<span>Requests<\/span>/,
     "Attempts is relabeled Requests");
   assert.match(source, /<span>Errors<\/span>/,
@@ -313,12 +315,12 @@ function createEnvironment(options = {}) {
     "Cache-only monitoring limitations must remain visible");
   assert.equal(e.ids.get("ad-diagnostics"), undefined,
     "Mock DOM should not pre-create a details element before first access");
-  e.ids.get("ad-help").dispatch("click");
+  api.openDiagnostics();
   const diag = e.ids.get("ad-diagnostics");
-  assert.equal(diag.open, true, "Help button reveals safety and diagnostics");
+  assert.equal(diag.open, true, "Console command still reveals diagnostics");
   diag.open = false;
   api.openDiagnostics();
-  assert.equal(diag.open, true, "Console command reveals diagnostics");
+  assert.equal(diag.open, true, "Diagnostics still accessible without header help button");
   assert.equal(api.connected, true, "Find real runtime and named exports");
   assert.equal(api.running, false, "Never start deletion automatically");
   assert.match(source, /id="ad-panel"/, "Panel is available for theme state");
@@ -338,6 +340,18 @@ function createEnvironment(options = {}) {
     "UI order: Enable/Disable → Where to delete → DMs → Servers → Counters");
   const dmBlock = e.ids.get("ad-dm-block");
   const serverBlock = e.ids.get("ad-server-block");
+  assert.match(source, /\.delay\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/,
+    "Delay rows use 3 equal-width CSS grid columns");
+  assert.match(source, /\.presets\{display:contents\}/,
+    "Preset wrapper does not occupy an extra grid cell");
+  for (const kind of ["dm", "servers"]) {
+    const renderedPresets = [...source.matchAll(new RegExp('data-delay-for="' + kind + '" data-delay="(\\d+)"', "g"))]
+      .map(match => match[1]);
+    assert.deepEqual(renderedPresets, ["4", "60"],
+      kind + " row has only custom / 4s / 60s");
+    assert.equal(e.presets.filter(p => p.dataset.delayFor === kind).length, 2,
+      "Mock and markup expose only two preset buttons for " + kind);
+  }
   assert.equal(dmBlock.style.display, "", "Everywhere shows DM timing");
   assert.equal(serverBlock.style.display, "", "Everywhere shows server timing");
   assert.equal(e.ids.get("ad-toggle").textContent, "Enable",
@@ -517,12 +531,12 @@ function createEnvironment(options = {}) {
   const settingsStored = JSON.parse(splitDelays.stored.get("discord-autodelete-ui-v2"));
   assert.equal(settingsStored.serverDelay, 30);
   assert.equal(settingsStored.dmDelay, 60);
-  const uiServers = splitDelays.presets.find(p => p.dataset.delayFor === "servers" && p.dataset.delay === "10");
-  const uiDm = splitDelays.presets.find(p => p.dataset.delayFor === "dm" && p.dataset.delay === "30");
+  const uiServers = splitDelays.presets.find(p => p.dataset.delayFor === "servers" && p.dataset.delay === "4");
+  const uiDm = splitDelays.presets.find(p => p.dataset.delayFor === "dm" && p.dataset.delay === "60");
   uiServers.dispatch("click");
   uiDm.dispatch("click");
-  assert.equal(dual.status().serverDelaySeconds, 10, "Server preset only changes server delay");
-  assert.equal(dual.status().dmDelaySeconds, 30, "DM preset only changes DM delay");
+  assert.equal(dual.status().serverDelaySeconds, 4, "Server 4s preset only changes server delay");
+  assert.equal(dual.status().dmDelaySeconds, 60, "DM 60s preset only changes DM delay");
   dual.pause();
   assert.equal(dual.status().pending, 0);
   dual.stop();
@@ -533,8 +547,8 @@ function createEnvironment(options = {}) {
   ] });
   vm.runInContext(source, persisted.context, { timeout: 3000 });
   const afterReload = persisted.window.DiscordAutoDelete;
-  assert.equal(afterReload.status().serverDelaySeconds, 10);
-  assert.equal(afterReload.status().dmDelaySeconds, 30);
+  assert.equal(afterReload.status().serverDelaySeconds, 4);
+  assert.equal(afterReload.status().dmDelaySeconds, 60);
   assert.equal(afterReload.running, false, "Never enable by default after reload");
   afterReload.stop();
 
@@ -735,7 +749,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.10 graphite glass UI, minimal diagnostics, Requests/Errors labels, conditional timers and queue logic");
+  console.log("PASS: v3.11 clean header, 3 equal delay controls, preset persistence, scopes and queue logic");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
