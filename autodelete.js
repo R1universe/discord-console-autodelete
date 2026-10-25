@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.11 — compact title and symmetric 3-part delay controls; experimental console prototype
+ * Discord AutoDelete v3.13 — minimize completely hides overlay; experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.12.0";
+  const VERSION = "3.13.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -98,8 +98,6 @@
     ".loglist{max-height:135px;overflow:auto;scrollbar-width:thin;color:#aeb9c1;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
     ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#87929d;margin-right:5px}.logitem.bad{color:#f1a9af}.logitem.good{color:#94dab6}",
     ".footer button.diag-action{border:1px solid #33404a;background:linear-gradient(140deg,#20272f,#171e25);color:#d8e0e7;border-radius:9px;padding:10px;width:100%;margin-top:12px}.footer button.diag-action:hover{background:#28333b}",
-    ".pill{display:none;align-items:center;gap:10px;background:#13191d;border:1px solid #495460;color:#f3f6f4;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
-    ".collapsed .panel{display:none}.collapsed .pill{display:flex}",
     "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:14px}.head{padding:13px 14px}.footer{padding:0 14px}}",
     /* v3.12: transparent frosted glass with contrasting blurple and emerald states */,
     ".panel{width:392px;max-width:calc(100vw - 24px);border-radius:24px;border:1px solid #d6e0ff75;background:radial-gradient(ellipse at 80% -15%,#8598ff33,transparent 75%),linear-gradient(150deg,#2d3857c9,#12192bd1);backdrop-filter:blur(28px) saturate(165%);-webkit-backdrop-filter:blur(28px) saturate(165%);box-shadow:inset 0 1px 0 #ffffff72,0 25px 60px #000b,0 0 28px #7288ff21;transition:background .2s,border-color .2s,box-shadow .2s}",
@@ -131,7 +129,6 @@
     ".panel.is-active .footer{border-top-color:#b5ffde69;background:linear-gradient(150deg,#a4ffcf21,#154c457f)}",
     ".diagnostics>summary{padding:14px 1px;color:#e3e9fa;font-weight:650}.diagnostics>summary:after{color:#e9eeff}",
     ".footer button.diag-action{border-radius:13px;border-color:#b3c8ff75;background:linear-gradient(140deg,#bac9ff33,#283c627f);box-shadow:inset 0 1px 0 #fff5}",
-    ".pill{backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px);background:#263858c9;border:1px solid #c4d4ff85}",
     "@media(prefers-reduced-motion:reduce){.panel,.primary{transition:none}}"
   ].join("\n");
   shadow.appendChild(style);
@@ -141,7 +138,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.12</span></h1></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.13</span></h1></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -176,8 +173,7 @@
           '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
         '</div>',
       '</details></div>',
-    '</section>',
-    '<button id="ad-pill" class="pill" type="button" aria-label="Open AutoDelete"><span>◷</span><span id="ad-pill-text">AutoDelete · Off</span></button>'
+    '</section>'
   ].join("");
   shadow.appendChild(root);
   const el = id => shadow.getElementById(id);
@@ -251,7 +247,6 @@
     el("ad-requests").textContent = state.requests;
     el("ad-failed").textContent = state.failed;
 
-    el("ad-pill-text").textContent = "AutoDelete · " + (state.enabled ? "Active" : state.error ? "Error" : "Paused");
   }
 
   function cancel(id) {
@@ -757,8 +752,12 @@
     btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
   shadow.querySelectorAll("[data-scope]").forEach(btn =>
     btn.addEventListener("click", () => setScope(btn.dataset.scope)));
-  el("ad-min").addEventListener("click", () => root.classList.add("collapsed"));
-  el("ad-pill").addEventListener("click", () => root.classList.remove("collapsed"));
+  // Minimize hides the ENTIRE floating overlay, not a replacement pill.
+  // The monitoring timers and listeners keep running. Reopen through
+  // DiscordAutoDelete.open() or by pasting this same script again.
+  function hidePanel() { host.style.display = "none"; }
+  function showPanel() { host.style.display = ""; }
+  el("ad-min").addEventListener("click", hidePanel);
 
   // Optional drag handle: only the header moves the overlay.
   let moving = null;
@@ -792,10 +791,10 @@
   const controller = {
     get running() { return state.ready && state.enabled && !state.destroyed; },
     get connected() { return state.ready; },
-    open() { root.classList.remove("collapsed"); },
-    hide() { root.classList.add("collapsed"); },
+    open() { showPanel(); },
+    hide() { hidePanel(); },
     openDiagnostics() {
-      root.classList.remove("collapsed");
+      showPanel();
       el("ad-diagnostics").open = true;
     },
     status() {
