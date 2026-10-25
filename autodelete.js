@@ -538,6 +538,7 @@
       state.ready = true;
       state.enabled = false;
       notify("Module candidates resolved: " + state.monitor + ". Not live-verified. Enable to test.", "good");
+      notify("Filtered " + discovered.ignoredProxies + " synthetic/i18n export candidates.");
       if (!discovered.activeDispatchers.length)
         notify("Limited coverage: only the open channel is monitored.", "bad");
     } catch (err) {
@@ -629,7 +630,8 @@
     status() {
       const snapshot = {
         ready: state.ready, enabled: state.enabled, error: state.error, monitor: state.monitor,
-        delaySeconds: config.delay, scope: config.scope, pending: state.pending.size,
+        delaySeconds: config.delay, scope: config.scope,
+        filteredProxyExports: hooks?.ignoredProxies ?? 0, pending: state.pending.size,
         requests: state.requests, failed: state.failed, skipped: state.skipped
       };
       console.table(snapshot);
