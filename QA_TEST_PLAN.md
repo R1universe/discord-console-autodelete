@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.5
+# Manual QA Plan — Discord AutoDelete v3.6
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,19 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.6 focused UI verification (no messages need to be sent)
+
+1. Reload Discord Web, inspect the updated [autodelete.js](./autodelete.js), and paste the complete script into the browser console.
+2. Confirm the header says `v3.6`. The dark panel should show both separate delay settings, Scope, Enable/Pause, three counters and a small queue line **without the old introductory paragraph or large warning banner**.
+3. Confirm `Diagnostics & safety` starts **closed**. Click its label, then close it; click `?` in the header and verify it opens again.
+4. Confirm the detailed self-bot risk warning, caveat that Attempts is not a confirmed delete count, Activity Log and `Reconnect modules` are present inside Diagnostics.
+5. Inspect the compact panel with a narrow browser window. Ensure the body scrolls if Diagnostics is expanded and actions remain usable.
+6. Confirm that existing delay values persist, and that enabling monitoring is **still manual**.
+7. If the client reports an actual connection failure, confirm that failure remains visible even while Diagnostics is collapsed; do not trigger a failure intentionally.
+8. If cache-only fallback is used, confirm a concise `Limited coverage: current channel only` notice is visible.
+
+No message deletion or account-token information is needed for this visual QA. This is a layout change; previously observed Discord API 404/429 issues remain open.
 
 ## v3.5 focused verification — separate delays
 
