@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.1.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.2.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -102,7 +102,30 @@ function createEnvironment(options = {}) {
   };
   Object.setPrototypeOf(channels, { constructor: { displayName: "ChannelStore" } });
 
+  const duplicateRestWrappers = {};
+  if (options.withRepeatedRest) {
+    const getAPIBaseURL = () => "https://discord.com/api/v9";
+    for (let i = 0; i < 83; i++) {
+      duplicateRestWrappers["rest-copy-" + i] = {
+        exports: { ["rest" + i]: { ...rest, getAPIBaseURL } }
+      };
+    }
+  }
+  if (options.withConflictingRest) {
+    duplicateRestWrappers.conflict = {
+      exports: { otherRest: { ...rest, del() { return Promise.resolve(); },
+        getAPIBaseURL() { return "https://discord.com/api/v9"; } } }
+    };
+  }
+  const duplicateActions = {};
+  if (options.withRepeatedActions) {
+    for (let i = 0; i < 84; i++) duplicateActions["action-copy-" + i] = {
+      exports: { ["actions" + i]: { ...actions } }
+    };
+  }
   const native = { c: {
+    ...duplicateRestWrappers,
+    ...duplicateActions,
     ...(options.withoutDispatcher ? {} : { one: { exports: { A: dispatcher } } }),
     two: { exports: { B: users } },
     ...(options.withNestedRest ? {} : {
@@ -233,6 +256,44 @@ function createEnvironment(options = {}) {
   assert.equal(fallback.status().pending, 0, "Does not reschedule same message");
   fallback.stop();
 
+  const duplicates = createEnvironment({
+    withoutDispatcher: true, withMessageStore: true, withRestOnly: true,
+    withRepeatedRest: true
+  });
+  vm.runInContext(source, duplicates.context, { timeout: 3000 });
+  const deduplicated = duplicates.window.DiscordAutoDelete;
+  assert.equal(deduplicated.connected, true,
+    "83 distinct wrappers exporting one REST delete function must not count as 83 different operations");
+  deduplicated.resume();
+  duplicates.cached.push({
+    id: "555555555555555555",
+    author: { id: duplicates.account.id },
+    channel_id: "444444444444444444",
+    guild_id: "222222222222222222"
+  });
+  duplicates.tick();
+  await duplicates.flushTimers();
+  assert.deepEqual(duplicates.restURLs,
+    ["/channels/444444444444444444/messages/555555555555555555"]);
+  deduplicated.stop();
+
+  const repeatedActions = createEnvironment({ withRepeatedActions: true });
+  vm.runInContext(source, repeatedActions.context, { timeout: 3000 });
+  assert.equal(repeatedActions.window.DiscordAutoDelete.connected, true,
+    "Repeated MessageAction re-exports must resolve by function identity");
+  repeatedActions.window.DiscordAutoDelete.stop();
+
+  const conflict = createEnvironment({
+    withoutDispatcher: true, withMessageStore: true, withRestOnly: true,
+    withRepeatedRest: true, withConflictingRest: true
+  });
+  vm.runInContext(source, conflict.context, { timeout: 3000 });
+  assert.equal(conflict.window.DiscordAutoDelete.connected, false,
+    "Distinct REST delete functions must fail closed");
+  assert.match(conflict.window.DiscordAutoDelete.status().error,
+    /distinct del functions/, "Show distinct operation counts");
+  conflict.window.DiscordAutoDelete.stop();
+
   const e3 = createEnvironment({
     withoutDispatcher: true, withMessageStore: true,
     withRestOnly: true, withNestedRest: true, splitRest: true
@@ -258,7 +319,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: modules, safe default, cache fallback, REST, queue, scopes, account switch, English UI");
+  console.log("PASS: function-identity re-exports, ambiguity, modules, fallback, REST, queue, scopes and English UI");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
