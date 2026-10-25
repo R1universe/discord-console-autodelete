@@ -1,4 +1,4 @@
-# Discord AutoDelete v3.1
+# Discord AutoDelete v3.2.1
 
 An experimental **English-first, in-page control panel** for deleting your own new Discord messages after a configurable delay. This script runs in the Discord web client's JavaScript console. The panel opens in **paused** mode by default.
 
@@ -49,9 +49,10 @@ The original v1 and v2 versions failed on some real Discord builds:
 FluxDispatcher: 0 candidates
 ```
 
-### What changed in v3 and v3.1
+### What changed in v3–v3.2
 
 - **v3.1:** Searches all Webpack runtimes as a single pool, diagnoses ambiguous matches by candidate counts, and discovers the REST client from `getAPIBaseURL` exports and nested `HTTP` transports. This addresses a case where `REST=false` did not mean that REST was absent.
+- **v3.2:** Re-exported Discord functions may appear through dozens of wrapper objects. Module selection now groups wrappers by **actual function reference** rather than treating every wrapper as a different operation. If distinct deletion functions remain, the script stops rather than guessing. 
 - Flux is **not mandatory**. The script inspects named Webpack exports across runtime caches and accepts candidates with the core subscribe/dispatch interface.
 - If an event dispatcher cannot be found but `MessageStore` and `SelectedChannelStore` are accessible, it can monitor the **currently open channel** by polling its cached messages.
 - Cache-only mode is **not global monitoring**. Navigating to a new channel establishes a baseline so old messages won't be deleted; the first message sent during a channel switch might be missed.
@@ -89,4 +90,4 @@ Mocked tests cover multiple runtimes, named exports, safe default, event monitor
 [Discord's self-bot policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) prohibits this category of automation, including scripts that change your own messages. Use of a secondary account doesn't make the method permitted.
 ### Current test status
 
-Version 3.1 passed GitHub Actions checks using mocks, including a regression case where the HTTP transport is nested under a wrapper exported from another runtime. **This is not a live Discord test.** If the UI still says ERROR, note the module candidate counts shown in the panel; do not share or extract an authorization token.
+Version 3.2 passed GitHub Actions checks using mocks, including regression cases with 83 duplicated REST exports, duplicated MessageActions, and genuinely ambiguous deletion functions. **This is not a live Discord test.** If the UI still says ERROR, note the module candidate counts shown in the panel; do not share or extract an authorization token.
