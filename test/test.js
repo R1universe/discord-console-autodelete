@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.7.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.8.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -12,7 +12,9 @@ function fakeElement() {
   const classes = new Set();
   return {
     style: {}, className: "", dataset: {}, value: "", textContent: "",
-    innerHTML: "", disabled: false, removed: false,
+    innerHTML: "", disabled: false, removed: false, attrs: {},
+    setAttribute(name, value) { this.attrs[name] = String(value); },
+    getAttribute(name) { return this.attrs[name] ?? null; },
     classList: { add(x) { classes.add(x); }, remove(x) { classes.delete(x); },
       toggle(x, force) { if (force) classes.add(x); else classes.delete(x); },
       contains(x) { return classes.has(x); } },
@@ -45,12 +47,21 @@ function createEnvironment(options = {}) {
       return e;
     })
   );
+  const scopeButtons = ["all", "servers", "dm"].map(scope => {
+    const btn = fakeElement();
+    btn.dataset.scope = scope;
+    return btn;
+  });
   shadow = {
     getElementById(id) {
       if (!ids.has(id)) ids.set(id, fakeElement());
       return ids.get(id);
     },
-    querySelectorAll() { return presets; },
+    querySelectorAll(selector) {
+      if (selector === "[data-delay-for]") return presets;
+      if (selector === "[data-scope]") return scopeButtons;
+      throw new Error("Unexpected selector: " + selector);
+    },
     appendChild() {},
   };
   const document = {
@@ -253,7 +264,7 @@ function createEnvironment(options = {}) {
   return {
     context, window, document, ids, presets, localStorage, account,
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
-    flushTimers, timers, deletions, calls, cached, restURLs, stored, presets,
+    flushTimers, timers, deletions, calls, cached, restURLs, stored, presets, scopeButtons,
     proxyReads, tick: () => interval()
   };
 }
@@ -263,8 +274,8 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // v3.7: DM-first compact UI keeps risk details accessible.
-  assert.match(source, /AutoDelete <span class="version">v3\.7<\/span>/);
+  // v3.8: compact dark / green state-dependent UI retains safety disclosure.
+  assert.match(source, /AutoDelete <span class="version">v3\.8<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics &amp; safety<\/summary>/,
@@ -289,9 +300,48 @@ function createEnvironment(options = {}) {
   assert.equal(diag.open, true, "Console command reveals diagnostics");
   assert.equal(api.connected, true, "Find real runtime and named exports");
   assert.equal(api.running, false, "Never start deletion automatically");
+  assert.match(source, /id="ad-panel"/, "Panel is available for theme state");
+  assert.doesNotMatch(source, /id="ad-state"|id="ad-dot"|id="ad-next"/,
+    "Redundant status row and empty queue text are gone");
+  assert.doesNotMatch(source, /<select id="ad-scope">/,
+    "Native select replaced with 3 buttons");
+  assert.match(source, /class="scope-switch" role="group"/,
+    "Scope segmented control remains labelled");
+  const toggleIndex = source.indexOf('id="ad-toggle"');
+  const dmIndex = source.indexOf('<label for="ad-dm-delay">');
+  assert.ok(toggleIndex > 0 && toggleIndex < dmIndex,
+    "Primary Enable/Pause action is above the DM and Server timer controls");
+  const panel = e.ids.get("ad-panel");
+  assert.ok(!panel.classList.contains("is-active"), "Default paused panel stays black");
+  assert.ok(!panel.classList.contains("is-error"), "No false error glow");
+  const scope = e.scopeButtons;
+  assert.equal(scope.length, 3);
+  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
+    ["true","false","false"], "Everywhere default has a single active scope");
+  scope[1].dispatch("click");
+  assert.equal(api.status().scope, "servers", "Clicking Servers changes scope");
+  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
+    ["false","true","false"], "Selected scope is visually and accessibly exclusive");
+  scope[2].dispatch("click");
+  assert.equal(api.status().scope, "dm", "Clicking DMs changes scope");
+  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
+    ["false","false","true"]);
+  scope[0].dispatch("click");
+  assert.equal(api.status().scope, "all", "Everywhere can be reselected");
+  assert.match(source, /\.panel\.is-active\{[^"\n]*--ad-accent:#299b68/,
+    "Active state uses green tokens, not an always-green palette");
+  assert.match(source, /\.panel\.is-active \.primary\{/,
+    "Enabled button is highlighted green");
+  assert.match(source, /\.panel\.is-active \.scope-btn\.selected\{/,
+    "Selected scope becomes green while monitoring is active");
+
   assert.ok(e.ids.get("ad-warning"), "Dashboard renders");
 
   assert.equal(api.resume(), true);
+  assert.ok(panel.classList.contains("is-active"),
+    "Resume enables green theme across the panel");
+  assert.equal(e.ids.get("ad-toggle").textContent, "Pause · clear queue",
+    "Primary button communicates active state without status row");
   e.post("555555555555555555", "999999999999999999");
   assert.equal(api.status().pending, 0, "Ignore other people");
   e.post("555555555555555555");
@@ -310,6 +360,9 @@ function createEnvironment(options = {}) {
   assert.equal(api.status().pending, 1, "DM message queued");
   assert.equal([...e.timers.values()][0].ms, 30000);
   api.pause();
+  assert.ok(!panel.classList.contains("is-active"),
+    "Pause restores neutral black palette");
+  assert.equal(e.ids.get("ad-toggle").textContent, "Enable auto-delete");
   assert.equal(api.status().pending, 0);
   assert.equal(e.timers.size, 0, "Pause cancels timers");
 
@@ -638,7 +691,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.7 DM-first editable inputs, focus locks, keyboard isolation, server/DM timers and safety");
+  console.log("PASS: v3.8 black-green active theme, segmented scope controls, top CTA, timer editing, safety and queues");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
