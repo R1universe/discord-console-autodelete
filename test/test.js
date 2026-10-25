@@ -99,6 +99,7 @@ function createEnvironment(options = {}) {
   const channels = {
     getChannel(id) {
       if (id === "333333333333333333") return { id, type: 1 };
+      if (id === "888888888888888888") return { id, type: 3 };
       return { id, type: 0, guild_id: "222222222222222222" };
     },
     getChannels() { return {}; }
@@ -305,13 +306,14 @@ function createEnvironment(options = {}) {
   assert.throws(() => dual.setServerDelay(86401), /Delay must be an integer/, "Reject too-long server delay");
   assert.equal(dual.resume(), true);
   splitDelays.post("555555555555555555"); // Server
-  splitDelays.post("666666666666666666", splitDelays.account.id, "333333333333333333"); // DM
-  assert.equal(dual.status().pending, 2);
-  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000],
+  splitDelays.post("666666666666666666", splitDelays.account.id, "333333333333333333"); // 1:1 DM
+  splitDelays.post("777777777777777777", splitDelays.account.id, "888888888888888888"); // Group DM, type 3
+  assert.equal(dual.status().pending, 3);
+  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000, 60000],
     "Different timer durations for server and DM messages");
   // Changing a delay must not alter the scheduled timers.
   dual.setServerDelay(30);
-  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000],
+  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000, 60000],
     "Old pending deadlines remain intact after changing a setting");
   const settingsStored = JSON.parse(splitDelays.stored.get("discord-autodelete-ui-v2"));
   assert.equal(settingsStored.serverDelay, 30);
