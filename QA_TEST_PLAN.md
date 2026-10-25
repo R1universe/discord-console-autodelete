@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.10
+# Manual QA Plan — Discord AutoDelete v3.11
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,19 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.11 three-control timing layout (no messages required)
+
+1. Reload Discord Web, review and paste v3.11. Confirm only the **AutoDelete v3.11** title, Minimize and Close remain in the header: no subtitle or **?** button.
+2. Open the **Diagnostics** disclosure from the footer; it must still show the log and Reconnect.
+3. In Everywhere mode, each delay row must show exactly **three equal-width controls**: custom input, **4s**, and **60s**.
+4. Click 4s for DM and 60s for Servers; check `DiscordAutoDelete.status()` reports independent delays.
+5. Type custom values such as 13 and 125; Enter or click outside to commit. Neither input should lose focus or reset while typing.
+6. Change scope to DMs then Servers and verify only the relevant three-element row appears and the hidden setting retains its value.
+7. Refresh the page and reload the script: the custom values must still persist, and deletion must remain disabled by default.
+8. Narrow the browser window and confirm the three columns remain equal without clipping or horizontal scrolling.
+
+No actual message deletion is required for this UI check.
 
 ## v3.10 graphite-glass appearance and counters (no messages required)
 
