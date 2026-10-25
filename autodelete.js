@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.3.0";
+  const VERSION = "3.4.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -33,7 +33,7 @@
   };
   const state = {
     ready: false, enabled: false, error: "", pending: new Map(),
-    requests: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), cacheSeen: new Map(), monitor: "",
+    requests: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(), cacheSeen: new Map(), monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false
   };
   let ticker = null;
@@ -95,7 +95,7 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.3</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.4</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
         '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
@@ -112,8 +112,8 @@
         '<button class="primary" id="ad-toggle" disabled>Checking connection…</button>',
         '<button class="reconnect" id="ad-retry" style="display:none">Retry connection</button>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
-        '<div class="stat"><strong id="ad-requests">0</strong><span>Requests</span></div>',
-        '<div class="stat"><strong id="ad-failed">0</strong><span>Errors</span></div></div>',
+        '<div class="stat"><strong id="ad-requests">0</strong><span>Attempts</span></div>',
+        '<div class="stat"><strong id="ad-failed">0</strong><span>Caught</span></div></div>',
         '<div class="next" id="ad-next">No scheduled deletions</div>',
         '<div class="logs"><div class="logshead">ACTIVITY LOG <span class="hint">No message content recorded</span></div><div class="loglist" id="ad-logs" aria-live="polite"></div></div>',
       '</div>',
@@ -415,17 +415,41 @@
     if (config.scope === "dm") return direct;
     return guild && !direct;
   }
+  // Discord uses a temporary local message whose id may be the client
+  // nonce. The cache often lists it as SENDING without optimistic=true.
+  // Never schedule deletion until a server-assigned message ID is present.
+  // Confirmed by the user-provided live event trace: M2.id === nonce, SENDING;
+  // M3.id !== nonce, SENT, with the same nonce.
+  function isProvisional(msg, event) {
+    if (!msg) return true;
+    if (event?.optimistic === true || msg.optimistic === true) return true;
+    const stateName = typeof msg.state === "string" ? msg.state.toUpperCase() : "";
+    if (["SENDING", "QUEUED", "PENDING", "FAILED", "SEND_FAILED"].includes(stateName))
+      return true;
+    const id = String(msg.id ?? "");
+    return msg.nonce != null && id === String(msg.nonce);
+  }
+
   function onCreate(event) {
     if (!state.enabled || !hooks || state.destroyed) return;
     const msg = event?.message;
     if (!msg || String(msg.author?.id ?? "") !== state.accountId) return;
-    if (event?.optimistic === true || msg.optimistic === true) return;
+    if (isProvisional(msg, event)) return;
     const id = String(msg.id ?? "");
     const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
     if (!validId(id) || !validId(channelId) || state.pending.has(id) || state.processed.has(id)) return;
     if (!scopeMatches(msg, channelId)) { state.skipped++; return; }
+    // Some clients emit more than one confirmed object for the same send.
+    // The client nonce correlates them without reading/storing message text.
+    const nonceKey = msg.nonce == null ? null : channelId + ":" + String(msg.nonce);
+    if (nonceKey && state.processedNonces.has(nonceKey)) return;
     state.processed.add(id);
     if (state.processed.size > 5000) state.processed.delete(state.processed.values().next().value);
+    if (nonceKey) {
+      state.processedNonces.add(nonceKey);
+      if (state.processedNonces.size > 5000)
+        state.processedNonces.delete(state.processedNonces.values().next().value);
+    }
     state.detected++;
     const deadline = Date.now() + config.delay * 1000;
     const timer = setTimeout(async () => {
@@ -438,17 +462,20 @@
         render();
         return;
       }
+      // Count an attempt before invoking the client's delete action.
+      // MessageActions may return void and perform async HTTP in the background,
+      // so resolving this call is NOT a server-confirmed successful deletion.
+      state.requests++;
       try {
         if (hooks.rest) {
           await Promise.resolve(hooks.rest.del({ url: "/channels/" + channelId + "/messages/" + id }));
         } else {
           await Promise.resolve(hooks.actions.deleteMessage(channelId, id));
         }
-        state.requests++;
-        notify("Delete request completed.", "good");
+        notify("Delete action invoked (server result not independently verified).", "good");
       } catch (err) {
         state.failed++;
-        notify("Delete failed: " + String(err?.message ?? err).slice(0, 140), "bad");
+        notify("Caught delete error: " + String(err?.message ?? err).slice(0, 140), "bad");
       }
       render();
     }, config.delay * 1000);
@@ -483,6 +510,9 @@
     for (const msg of items) {
       const id = String(msg?.id ?? "");
       if (!validId(id) || seen.has(id)) continue;
+      // Don't mark a provisional cache ID as already seen. The same cached
+      // message might transition to SENT without changing its ID.
+      if (isProvisional(msg)) continue;
       seen.add(id);
       if (String(msg.author?.id ?? "") === state.accountId)
         onCreate({ message: msg, channelId });
@@ -632,7 +662,8 @@
         ready: state.ready, enabled: state.enabled, error: state.error, monitor: state.monitor,
         delaySeconds: config.delay, scope: config.scope,
         filteredProxyExports: hooks?.ignoredProxies ?? 0, pending: state.pending.size,
-        requests: state.requests, failed: state.failed, skipped: state.skipped
+        requests: state.requests, failed: state.failed, skipped: state.skipped,
+        metricsNote: "requests = attempted delete actions; failed = synchronously/awaitably caught errors only; no server confirmation"
       };
       console.table(snapshot);
       return snapshot;
