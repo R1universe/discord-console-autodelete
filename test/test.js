@@ -301,8 +301,8 @@ function createEnvironment(options = {}) {
   assert.equal(dual.setDmDelay(60), 60);
   assert.equal(dual.status().serverDelaySeconds, 5);
   assert.equal(dual.status().dmDelaySeconds, 60);
-  assert.throws(() => dual.setDmDelay(1), RangeError, "Reject too-short DM delay");
-  assert.throws(() => dual.setServerDelay(86401), RangeError, "Reject too-long server delay");
+  assert.throws(() => dual.setDmDelay(1), /Delay must be an integer/, "Reject too-short DM delay");
+  assert.throws(() => dual.setServerDelay(86401), /Delay must be an integer/, "Reject too-long server delay");
   assert.equal(dual.resume(), true);
   splitDelays.post("555555555555555555"); // Server
   splitDelays.post("666666666666666666", splitDelays.account.id, "333333333333333333"); // DM
