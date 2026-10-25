@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.10 — refined futuristic dark/glass UI and honest counters; experimental console prototype
+ * Discord AutoDelete v3.11 — compact title and symmetric 3-part delay controls; experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.10.0";
+  const VERSION = "3.11.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -78,9 +78,9 @@
     ".panel.is-active .primary:hover:not(:disabled){background:linear-gradient(135deg,#2cad6a,#1b8353)}",
     ".reconnect{width:100%;border:1px solid #3c4650;background:#1d2329;padding:9px;border-radius:9px;color:#d9e0e6;margin:0 0 12px}",
     ".field{margin-bottom:15px}.fieldrow{margin-bottom:8px}label{font-weight:660;font-size:12px;color:#e4e9ec}.hint{font-size:10px;color:var(--ad-dim)}",
-    ".delay{gap:7px}.value{width:79px;min-width:0;padding:11px 10px;border:1px solid #364049;background:linear-gradient(140deg,#1a1f25ec,#15191ef2);color:var(--ad-text);border-radius:9px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 #ffffff0a}",
+    ".delay{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;align-items:stretch}.value{display:block;width:100%;min-width:0;padding:11px 12px;border:1px solid #364049;background:linear-gradient(140deg,#1a1f25ec,#15191ef2);color:var(--ad-text);border-radius:9px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 #ffffff0a}",
     ".value:focus{border-color:var(--ad-accent);box-shadow:0 0 0 2px var(--ad-ring)}",
-    ".presets{display:flex;flex:1;gap:5px;min-width:0}.preset{flex:1;min-width:0;border:1px solid #35404a;background:linear-gradient(150deg,#1c2228ba,#151a20c9);color:#adb7c1;border-radius:9px;padding:11px 0;font-size:11px;line-height:1.2;box-shadow:inset 0 1px 0 #ffffff08}",
+    ".presets{display:contents}.preset{display:block;width:100%;min-width:0;border:1px solid #35404a;background:linear-gradient(150deg,#1c2228ba,#151a20c9);color:#adb7c1;border-radius:9px;padding:11px 0;font-size:11px;line-height:1.2;box-shadow:inset 0 1px 0 #ffffff08}",
     ".preset:hover{background:var(--ad-hover);color:#fff}.preset.selected{background:#6f7cff1e;color:#dfe3ff;border-color:#7784ff;box-shadow:inset 0 1px 0 #ffffff09,0 0 0 1px #6f7cff16}",
     ".panel.is-active .preset.selected{background:#35c87819;color:#d4f8e1;border-color:#35c8789e;box-shadow:0 0 12px #35c87812}",
     ".scope-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border:1px solid #2b343d;border-radius:12px;background:linear-gradient(160deg,#11161bbd,#171b1fcb);box-shadow:inset 0 1px 3px #0006}",
@@ -110,8 +110,8 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.10</span></h1><div class="muted">Timed Discord messages</div></div></div>',
-          '<div class="head-buttons"><button class="mini" id="ad-help" type="button" title="Open diagnostics" aria-label="Open diagnostics">?</button><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.11</span></h1></div></div>',
+          '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
       '<div class="body">',
@@ -127,11 +127,11 @@
           '</div></div>',
         '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2s–24h</span></div>',
           '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay-for="dm" data-delay="5">5s</button><button class="preset" data-delay-for="dm" data-delay="10">10s</button><button class="preset" data-delay-for="dm" data-delay="30">30s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
+          '<button class="preset" data-delay-for="dm" data-delay="4">4s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
         '</div></div></div>',
         '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2s–24h</span></div>',
           '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
+          '<button class="preset" data-delay-for="servers" data-delay="4">4s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
         '</div></div></div>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
         '<div class="stat" title="Deletion calls attempted; not verified server deletions"><strong id="ad-requests">0</strong><span>Requests</span></div>',
@@ -726,10 +726,6 @@
     btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
   shadow.querySelectorAll("[data-scope]").forEach(btn =>
     btn.addEventListener("click", () => setScope(btn.dataset.scope)));
-  el("ad-help").addEventListener("click", () => {
-    el("ad-diagnostics").open = true;
-    el("ad-diagnostics").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-  });
   el("ad-min").addEventListener("click", () => root.classList.add("collapsed"));
   el("ad-pill").addEventListener("click", () => root.classList.remove("collapsed"));
 
