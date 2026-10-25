@@ -271,9 +271,10 @@ function createEnvironment(options = {}) {
     "Module-discovery errors remain visible outside disclosure");
   assert.match(source, /id="ad-limited"/,
     "Cache-only monitoring limitations must remain visible");
-  const diag = e.ids.get("ad-diagnostics");
-  assert.equal(diag?.open, undefined, "Diagnostics start collapsed");
+  assert.equal(e.ids.get("ad-diagnostics"), undefined,
+    "Mock DOM should not pre-create a details element before first access");
   e.ids.get("ad-help").dispatch("click");
+  const diag = e.ids.get("ad-diagnostics");
   assert.equal(diag.open, true, "Help button reveals safety and diagnostics");
   diag.open = false;
   api.openDiagnostics();
