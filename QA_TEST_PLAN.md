@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.8
+# Manual QA Plan — Discord AutoDelete v3.9
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,20 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.9 contextual timer visibility (no message sending needed)
+
+1. Refresh Discord Web, inspect and run `autodelete.js`. Verify the header says **v3.9** and primary control says **Enable**.
+2. Confirm **Where to delete** is immediately below Enable and the timers appear beneath scope.
+3. With **Everywhere** selected, both **DMs · deletion delay** (first) and **Servers · deletion delay** (second) are visible.
+4. Set DM delay to 27 and Server delay to 45; switch to **DMs**. Only the DM delay must remain visible.
+5. Switch to **Servers**. Only the server delay must be visible, and it must still show 45.
+6. Switch to **Everywhere**. Both timers return with DM 27 and Server 45 unchanged.
+7. Click **Enable**. Confirm the theme turns green and the button reads **Disable**.
+8. Click **Disable**. Confirm black/neutral theme returns and any pending timers are cancelled.
+9. Check `DiscordAutoDelete.status()` to confirm both independent delay values and selected scope remain accurate. Reloading should leave the script disabled by default.
+
+No actual message deletion is required for these layout tests. Discord's restrictions and the pre-existing HTTP error-reporting limitation still apply.
 
 ## v3.8 quick UI verification (no message deletion necessary)
 
