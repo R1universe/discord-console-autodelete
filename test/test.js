@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.2.1.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.3.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -123,7 +123,49 @@ function createEnvironment(options = {}) {
       exports: { ["actions" + i]: { ...actions } }
     };
   }
+  // Discord i18n proxies may create and cache *any requested property*
+  // as a stable function, producing exactly the strange cross-family pattern.
+  const proxyReads = { unrelatedMethodCalls: 0 };
+  const fakeLocaleModules = {};
+  if (options.withFakeLocaleProxies) {
+    for (let i = 0; i < 83; i++) {
+      const target = {};
+      const simulated = new Proxy(target, {
+        get(obj, key) {
+          if (key === Symbol.toStringTag) return "IntlMessagesProxy";
+          if (typeof key === "string" && [
+            "deleteMessage", "getCurrentUser", "getMessages",
+            "getUser", "del", "getAPIBaseURL", "HTTP"
+          ].includes(key)) proxyReads.unrelatedMethodCalls++;
+          if (typeof key !== "string") return Reflect.get(obj, key);
+          if (!(key in obj)) Object.defineProperty(obj, key, {
+            value: function syntheticTranslation() {}, configurable: true,
+            enumerable: true, writable: true
+          });
+          return obj[key];
+        }
+      });
+      fakeLocaleModules["locale-" + i] = { exports: simulated };
+    }
+  }
+  if (options.withUntaggedCatchall) {
+    const target = {};
+    fakeLocaleModules.untagged = { exports: new Proxy(target, {
+      get(obj, key) {
+        if (key === Symbol.toStringTag) return undefined;
+        if (typeof key === "string" && [
+          "deleteMessage", "getCurrentUser", "getMessages", "del"
+        ].includes(key)) proxyReads.unrelatedMethodCalls++;
+        if (typeof key !== "string") return Reflect.get(obj, key);
+        if (!(key in obj)) Object.defineProperty(obj, key, {
+          value: function synthetic() {}, configurable: true, enumerable: true
+        });
+        return obj[key];
+      }
+    }) };
+  }
   const native = { c: {
+    ...fakeLocaleModules,
     ...duplicateRestWrappers,
     ...duplicateActions,
     ...(options.withoutDispatcher ? {} : { one: { exports: { A: dispatcher } } }),
@@ -198,7 +240,8 @@ function createEnvironment(options = {}) {
   }
   return {
     context, window, document, ids, presets, localStorage, account,
-    post, flushTimers, timers, deletions, calls, cached, restURLs, tick: () => interval()
+    post, flushTimers, timers, deletions, calls, cached, restURLs,
+    proxyReads, tick: () => interval()
   };
 }
 
@@ -269,6 +312,23 @@ function createEnvironment(options = {}) {
   assert.equal(unknownApi.status().pending, 0, "Unknown channel must not be assumed DM");
   unknownApi.stop();
 
+  const locales = createEnvironment({ withFakeLocaleProxies: true, withUntaggedCatchall: true });
+  vm.runInContext(source, locales.context, { timeout: 6000 });
+  const clean = locales.window.DiscordAutoDelete;
+  assert.equal(clean.connected, true,
+    "83 Discord-style translation proxies must not block actual module discovery");
+  assert.equal(locales.proxyReads.unrelatedMethodCalls, 0,
+    "Skip i18n and catch-all proxies before reading unrelated module methods");
+  assert.equal(clean.running, false,
+    "Even successful discovery must not auto-enable deletion");
+  clean.resume();
+  locales.post("555555555555555555");
+  await locales.flushTimers();
+  assert.deepEqual(locales.deletions, [
+    ["444444444444444444", "555555555555555555"]
+  ], "Only trusted mock MessageActions is selected");
+  clean.stop();
+
   const duplicates = createEnvironment({
     withoutDispatcher: true, withMessageStore: true, withRestOnly: true,
     withRepeatedRest: true
@@ -332,7 +392,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: function-identity re-exports, ambiguity, modules, fallback, REST, queue, scopes and English UI");
+  console.log("PASS: 83 i18n proxies, catch-all proxy, function identity, ambiguity, fallback, REST, scopes and UI");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
