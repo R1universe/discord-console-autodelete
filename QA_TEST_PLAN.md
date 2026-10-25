@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.6
+# Manual QA Plan — Discord AutoDelete v3.7
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,19 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.7 manual custom-input check (no messages need to be sent)
+
+1. Refresh Discord Web, run the reviewed `autodelete.js` and verify the panel says **v3.7**.
+2. Confirm **DMs** appears above **Servers**.
+3. Click the DM numeric field, `Cmd+A` / `Ctrl+A`, and type `125` slowly, pausing over 0.5s between digits. The value must **not** reset while typing.
+4. Press Enter; the value should save and remain `125`, including after refreshing the panel.
+5. Type `42` in Servers, then click outside; it should save separately.
+6. Attempt to commit `1` or a non-number; the previous valid setting should return with an informative log entry.
+7. Type `88` without committing, press Escape and verify the previous value is restored.
+8. Confirm presets still work, and neither timer is enabled automatically.
+
+Existing deletion logic is unchanged. No messages or network requests are required for this UI regression test.
 
 ## v3.6 focused UI verification (no messages need to be sent)
 
