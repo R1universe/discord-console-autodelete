@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.2.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.2.1.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -141,7 +141,9 @@ function createEnvironment(options = {}) {
       five: { exports: { E: messageStore } },
       six: { exports: { F: selectedChannel } }
     } : {}),
-    four: { exports: { D: channels } }
+    ...(options.withoutChannelStore ? {} : {
+      four: { exports: { D: channels } }
+    })
   } };
   const sentry = { c: {
     one: { exports: { irrelevant: {} } },
@@ -255,6 +257,17 @@ function createEnvironment(options = {}) {
   e2.tick();
   assert.equal(fallback.status().pending, 0, "Does not reschedule same message");
   fallback.stop();
+
+  // Unknown channel origin must never be treated as proof of a DM.
+  const unknown = createEnvironment({ withoutChannelStore: true });
+  vm.runInContext(source, unknown.context, { timeout: 3000 });
+  const unknownApi = unknown.window.DiscordAutoDelete;
+  assert.equal(unknownApi.connected, true);
+  unknownApi.setScope("dm");
+  unknownApi.resume();
+  unknown.post("555555555555555555", unknown.account.id, "333333333333333333");
+  assert.equal(unknownApi.status().pending, 0, "Unknown channel must not be assumed DM");
+  unknownApi.stop();
 
   const duplicates = createEnvironment({
     withoutDispatcher: true, withMessageStore: true, withRestOnly: true,
