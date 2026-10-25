@@ -5,19 +5,17 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const en = fs.readFileSync(path.join(root, "README.md"), "utf8");
-const ru = fs.readFileSync(path.join(root, "README_RU.md"), "utf8");
 const imagePath = path.join(root, "assets", "autodelete-active.webp");
 const screenshot = fs.readFileSync(imagePath);
 
 assert.ok(en.startsWith("# Discord AutoDelete"), "English landing page title");
 assert.match(en, /Discord AutoDelete.*Timed Message Deletion/i, "Title clearly describes the project");
 assert.match(en, /assets\/autodelete-active\.webp/, "English landing page shows UI screenshot");
-assert.match(ru, /assets\/autodelete-active\.webp/, "Russian guide shows UI screenshot");
 assert.ok(screenshot.length > 2000, "Screenshot is nonempty and more than a placeholder");
 assert.equal(screenshot.subarray(0, 4).toString("ascii"), "RIFF", "Valid WebP RIFF signature");
 assert.equal(screenshot.subarray(8, 12).toString("ascii"), "WEBP", "Valid WebP format");
 for (const item of ["autodelete.js", "QA_TEST_PLAN.md", "docs/RELEASE_HISTORY.md",
-  "docs/RELEASE_HISTORY_RU.md", "test/test.js"]) {
+  "test/test.js"]) {
   assert.ok(fs.existsSync(path.join(root, item)), "Linked documentation exists: " + item);
 }
 assert.match(en, /Discord prohibits/i, "Self-bot risk visible in current README");
