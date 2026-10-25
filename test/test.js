@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v2.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -27,7 +27,7 @@ function fakeElement() {
 }
 
 let shadow;
-function createEnvironment() {
+function createEnvironment(options = {}) {
   const ids = new Map();
   const presets = ["5", "10", "30", "60"].map(delay => {
     const e = fakeElement();
@@ -68,6 +68,21 @@ function createEnvironment() {
     }
   };
   const account = { id: "123456789012345678" };
+  const cached = [];
+  const messageStore = {
+    getMessages() { return { _array: cached }; },
+    getMessage(_channelId, msgId) { return cached.find(m => m.id === msgId); }
+  };
+  Object.setPrototypeOf(messageStore, { constructor: { displayName: "MessageStore" } });
+  const selectedChannel = {
+    getChannelId() { return "444444444444444444"; }
+  };
+  Object.setPrototypeOf(selectedChannel, { constructor: { displayName: "SelectedChannelStore" } });
+  const restURLs = [];
+  const rest = {
+    get() {}, post() {}, put() {}, patch() {},
+    del({ url }) { restURLs.push(url); return Promise.resolve(); }
+  };
   const users = {
     getCurrentUser() { return account; },
     getUser(id) { return id === account.id ? account : null; }
@@ -88,9 +103,13 @@ function createEnvironment() {
   Object.setPrototypeOf(channels, { constructor: { displayName: "ChannelStore" } });
 
   const native = { c: {
-    one: { exports: { A: dispatcher } },
+    ...(options.withoutDispatcher ? {} : { one: { exports: { A: dispatcher } } }),
     two: { exports: { B: users } },
-    three: { exports: { C: actions } },
+    three: { exports: { C: options.withRestOnly ? rest : actions } },
+    ...(options.withMessageStore ? {
+      five: { exports: { E: messageStore } },
+      six: { exports: { F: selectedChannel } }
+    } : {}),
     four: { exports: { D: channels } }
   } };
   const sentry = { c: { one: { exports: { irrelevant: {} } } } };
@@ -112,13 +131,14 @@ function createEnvironment() {
     table() {}
   };
   const window = { webpackChunkdiscord_app: chunks, innerWidth: 1280, innerHeight: 900 };
+  let interval = () => {};
   const context = vm.createContext({
     window, document, localStorage,
     location: { hostname: "discord.com" },
     console: mockConsole,
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); },
-    setInterval() { return 777; },
+    setInterval(fn) { interval = fn; return 777; },
     clearInterval() {},
     Symbol, Date, Number, Object, String, Set, Map, Math
   });
@@ -135,7 +155,10 @@ function createEnvironment() {
       await timer.fn();
     }
   }
-  return { context, window, document, ids, presets, localStorage, account, post, flushTimers, timers, deletions, calls };
+  return {
+    context, window, document, ids, presets, localStorage, account,
+    post, flushTimers, timers, deletions, calls, cached, restURLs, tick: () => interval()
+  };
 }
 
 (async () => {
@@ -178,7 +201,24 @@ function createEnvironment() {
 
   api.stop();
   assert.equal(e.window.DiscordAutoDelete, undefined, "Stop clears controller");
-  console.log("PASS: module discovery, safe default, queue, DM/server scope, pause, account switch, UI");
+  const e2 = createEnvironment({ withoutDispatcher: true, withMessageStore: true, withRestOnly: true });
+  vm.runInContext(source, e2.context, { timeout: 3000 });
+  const fallback = e2.window.DiscordAutoDelete;
+  assert.equal(fallback.connected, true, "Works without FluxDispatcher via cache-only fallback");
+  assert.match(fallback.status().monitor, /cache only/i, "Clearly labels reduced coverage");
+  assert.equal(fallback.running, false, "No implicit deletion");
+  fallback.resume();
+  e2.cached.push({ id: "555555555555555555", author: { id: e2.account.id }, channel_id: "444444444444444444", guild_id: "222222222222222222" });
+  e2.tick();
+  assert.equal(fallback.status().pending, 1, "Finds new own message in open-channel cache");
+  await e2.flushTimers();
+  assert.deepEqual(e2.restURLs, ["/channels/444444444444444444/messages/555555555555555555"], "Uses authenticated Discord REST module");
+  e2.tick();
+  assert.equal(fallback.status().pending, 0, "Does not reschedule same message");
+  fallback.stop();
+
+  assert.equal(/[^\x00-\x7F]*Временные сообщения/.test(source), false, "English-first interface");
+  console.log("PASS: modules, safe default, cache fallback, REST, queue, scopes, account switch, English UI");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
