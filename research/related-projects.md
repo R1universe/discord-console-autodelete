@@ -53,3 +53,12 @@ Two independently found client-plugin implementations closely match the requeste
 **Root-cause improvement in v3.1:** Equicord's [REST module lookup](https://github.com/Combatmaster331/Equicord/blob/main/src/webpack/common/utils.ts) first looks up `getAPIBaseURL`, then uses `mod.HTTP ?? mod`. Version 3.0 did not descend into the nested `HTTP` property. It also failed the entire discovery if it found more than one otherwise plausible candidate, and required every necessary module to be in the same Webpack runtime. Version 3.1 addresses both assumptions and reports candidate counts instead of misleading booleans.
 
 Even so, an installed client mod can resolve lazy modules via its own loader and patch APIs, which a one-time console script may not replicate reliably. **Live Discord compatibility still requires testing.**
+
+
+## v3.2: excessive wrapper matches in an actual client screenshot
+
+A Discord Web client showed `MessageActions=84 candidates (84 preferred)` and `RestAPI=85 candidates; 83 getAPIBaseURL wrappers; 83 tagged transports`, but the same client uniquely identified the actual UserStore and MessageStore via their store display names.
+
+The prior discovery implementation counted **export wrapper identities**, which is often not the same as the count of underlying operations. v3.2 groups deletion candidates by the identity of their actual `deleteMessage` function and REST candidates by the identity of `del`. If all wrappers refer to the same function, one representative can be selected without guessing between different operations. If there is more than one distinct operation, discovery still fails safely and reports the number of distinct functions.
+
+A CI regression now tests 83 wrappers sharing the same REST method and intentionally conflicting REST methods. This is a **hypothesis grounded in screenshots and source code**, not confirmed as the exact live Discord runtime's behavior until retested there.
