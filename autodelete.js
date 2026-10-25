@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.8 — black/green state-driven utility UI; experimental console prototype
+ * Discord AutoDelete v3.9 — scope-aware delay controls and simpler toggle; experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.8.0";
+  const VERSION = "3.9.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -109,7 +109,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.8</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.9</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-help" type="button" title="Safety and diagnostics" aria-label="Open safety and diagnostics">?</button><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -118,20 +118,20 @@
         '<div class="limited-alert" id="ad-limited" style="display:none">Limited coverage: current channel only</div>',
         '<button class="primary" id="ad-toggle" disabled>Checking connection…</button>',
         '<button class="reconnect" id="ad-retry" style="display:none">Retry connection</button>',
-        '<div class="field"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2s–24h</span></div>',
-          '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay-for="dm" data-delay="5">5s</button><button class="preset" data-delay-for="dm" data-delay="10">10s</button><button class="preset" data-delay-for="dm" data-delay="30">30s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
-        '</div></div></div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2s–24h</span></div>',
-          '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
-        '</div></div></div>',
         '<div class="field"><div class="fieldrow"><label id="ad-scope-label">Where to delete</label><span class="hint">Your messages only</span></div>',
           '<div class="scope-switch" role="group" aria-labelledby="ad-scope-label">',
             '<button type="button" class="scope-btn" data-scope="all" aria-pressed="true">Everywhere</button>',
             '<button type="button" class="scope-btn" data-scope="servers" aria-pressed="false">Servers</button>',
             '<button type="button" class="scope-btn" data-scope="dm" aria-pressed="false">DMs</button>',
           '</div></div>',
+        '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2s–24h</span></div>',
+          '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
+          '<button class="preset" data-delay-for="dm" data-delay="5">5s</button><button class="preset" data-delay-for="dm" data-delay="10">10s</button><button class="preset" data-delay-for="dm" data-delay="30">30s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
+        '</div></div></div>',
+        '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2s–24h</span></div>',
+          '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
+          '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
+        '</div></div></div>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
         '<div class="stat"><strong id="ad-requests">0</strong><span>Attempts</span></div>',
         '<div class="stat"><strong id="ad-failed">0</strong><span>Caught</span></div></div>',
@@ -194,7 +194,9 @@
       "Unofficial automation with limited coverage: only messages in your open channel may be observed. Discord can suspend the account, and deletion is not guaranteed." :
       "Unofficial account automation. Discord can suspend or terminate your account. Deletion is not guaranteed, and others may retain copies.";
     el("ad-toggle").disabled = !state.ready;
-    el("ad-toggle").textContent = state.enabled ? "Pause · clear queue" : "Enable auto-delete";
+    el("ad-toggle").textContent = state.enabled ? "Disable" : "Enable";
+    el("ad-toggle").setAttribute("title", state.enabled ?
+      "Disable and cancel pending timers" : "Enable auto-delete");
     el("ad-toggle").className = "primary" + (state.enabled ? " stop" : "");
     el("ad-retry").style.display = state.ready ? "none" : "block";
     // Discord can steal focus or route typing through document handlers.
@@ -209,6 +211,11 @@
       btn.classList.toggle("selected", selected);
       btn.setAttribute("aria-pressed", String(selected));
     });
+    // Scope controls which timing fields are relevant. The hidden category's
+    // value remains saved and is restored unchanged if the user selects it.
+    // Existing queued jobs keep their original deadlines.
+    el("ad-dm-block").style.display = config.scope === "servers" ? "none" : "";
+    el("ad-server-block").style.display = config.scope === "dm" ? "none" : "";
     shadow.querySelectorAll("[data-delay-for]").forEach(btn => {
       const seconds = btn.dataset.delayFor === "servers" ? config.serverDelay : config.dmDelay;
       btn.classList.toggle("selected", Number(btn.dataset.delay) === seconds);
