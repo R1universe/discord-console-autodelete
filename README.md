@@ -1,6 +1,26 @@
-# Discord AutoDelete v3.4
+# Discord AutoDelete v3.5
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.5 — independent server and DM delays
+
+The dashboard now has **two separate time controls**:
+
+- **Servers · deletion delay** — for your own confirmed messages in server channels.
+- **DMs · deletion delay** — for your own confirmed messages in one-to-one and group DMs.
+
+For example, set **Servers = 10 seconds** and **DMs = 60 seconds**, then choose **Everywhere**. Each message is assigned its applicable delay **when scheduled**. Existing pending jobs are never retimed by a settings change. Both settings are saved locally and survive refresh, but auto-delete always restarts **paused**.
+
+For existing users, v3.5 migrates the previous single `delay` setting to **both** fields, so the upgrade does not silently change existing behavior. Both fields accept integer delays of 2–86,400 seconds with 5/10/30/60s preset buttons.
+
+If channel identity cannot be reliably determined, no deletion is scheduled; the script never guesses which timer should apply. The separate delays and migration were verified using mocked tests, **not a live Discord session**.
+
+```js
+DiscordAutoDelete.setServerDelay(10) // Only server messages
+DiscordAutoDelete.setDmDelay(60)     // Only DMs and group DMs
+DiscordAutoDelete.setDelay(30) // sets both timers       // Legacy: set BOTH categories to 30s
+DiscordAutoDelete.status()           // Shows serverDelaySeconds and dmDelaySeconds
+```
 
 ## Status — 25 October 2026
 
@@ -19,17 +39,17 @@ For module discovery history see [research audit](./research/AUDIT_2026-10-25_RU
 
 ## QA and field testing
 
-- [Manual QA checklist (v3.3–v3.4)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
+- [Manual QA checklist (v3.3–v3.5)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
 - [Read-only queue event audit](./diagnostics/QUEUE_AUDIT_README.md) — investigate why one visible outgoing message can create two queued deletions, without invoking any DELETE operations.
 - v3.3 deletion worked in user testing; v3.4's fix is unit-tested but has not been live-tested. Broad correctness and reliability are unverified.
 
 ## Features
 
 - Floating, draggable dashboard in English, with status, queue, activity log and controls.
-- Delay from **2 seconds to 24 hours**, plus 5 / 10 / 30 / 60 second presets.
+- **Two independent delays** (servers and DMs), each from **2 seconds to 24 hours**, with 5 / 10 / 30 / 60 second presets.
 - Scopes: **all**, **servers only**, **DMs only** (scope classification depends on available channel metadata).
 - Enable, pause, retry detection, minimize, close.
-- Settings for delay and scope saved in this browser. Auto-deletion is **never enabled automatically**.
+- Both separate delays and the scope are saved in this browser. Auto-deletion is **never enabled automatically**.
 - Only message IDs are handled. Script does not retrieve a token, store text, read messages for their contents, or load code from an external site.
 - Tries **Flux event subscriptions** when available and **MessageStore polling** as a secondary strategy.
 - Uses the Discord client's already authenticated **RestAPI.del** action where available, otherwise **MessageActions.deleteMessage**. The script does not fetch a user token.
@@ -52,7 +72,9 @@ For module discovery history see [research audit](./research/AUDIT_2026-10-25_RU
 DiscordAutoDelete.status()
 DiscordAutoDelete.open()
 DiscordAutoDelete.hide()
-DiscordAutoDelete.setDelay(30)
+DiscordAutoDelete.setServerDelay(10)
+DiscordAutoDelete.setDmDelay(60)
+DiscordAutoDelete.setDelay(30) // sets both timers
 DiscordAutoDelete.setScope("servers") // all | servers | dm
 DiscordAutoDelete.resume()
 DiscordAutoDelete.pause()
