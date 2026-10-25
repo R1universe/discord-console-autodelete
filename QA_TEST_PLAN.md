@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.11
+# Manual QA Plan — Discord AutoDelete v3.12
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -11,10 +11,26 @@
 - Read the JavaScript source before running it. Never share a Discord account token, cookie or Authorization header.
 - Close unrelated sensitive chats and use a test channel.
 - After clicking **Pause** or closing the overlay, all pending timers are cancelled; after a refresh, the script and its pending queue disappear.
-- v3.4 labels counters **Attempts** (delete method invocations) and **Caught** (failures visible through the call/promise); neither is proof of complete server deletion or all background HTTP errors.
+- Current UI labels counters **Requests** (delete method calls) and **Errors** (caught failures); neither measures all server-confirmed outcomes or background HTTP failures.
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.12 glass design and 1-second minimum
+
+**UI checks — do not require sending/deleting messages:**
+
+1. Reload Discord Web before installing reviewed v3.12. The header must read `AutoDelete v3.12`; the script must still start disabled.
+2. Inspect disabled (blue-violet glass) and enabled (emerald glass) states. Background Discord content should appear softly blurred through the panel where the browser supports `backdrop-filter`. Legibility must remain good over dark and bright content.
+3. Confirm **Queued**, **Requests**, **Errors** show just numbers and labels — **no icons** — in balanced cards.
+4. With Everywhere selected, DM and Server timing rows each show custom / 4s / 60s. Switch to DM-only and Server-only and verify only the relevant row is visible.
+5. Enter `1` in each custom delay, commit using Enter, and confirm `DiscordAutoDelete.status().dmDelaySeconds` and `.serverDelaySeconds` both equal 1. Confirm `0` and `86401` remain rejected.
+6. Verify Disable cancels pending timers and restores the idle tint. The logs and reconnect remain available under Diagnostics.
+7. In narrow browser widths and with reduced motion enabled, confirm controls remain usable, glass blur is not distracting, and no content clips.
+
+**Low-volume operational timing check, only if voluntarily performed:** use one harmless message in a controlled test channel with no other scripted deletion jobs. Do not expect deletion at exactly 1.0 seconds; the timer starts when the script observes the confirmed message. Stop testing if the client reports rate limits. Do not expose tokens, message text or raw message IDs.
+
+GitHub Actions covers 1000ms scheduling in mocks but **does not prove live delivery timing or server-side deletion**.
 
 ## v3.11 three-control timing layout (no messages required)
 
