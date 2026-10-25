@@ -1,25 +1,27 @@
-# Discord AutoDelete v3.3
+# Discord AutoDelete v3.4
 
-An experimental **English-first, in-page control panel** for deleting your own new Discord messages after a configurable delay. This script runs in the Discord web client's JavaScript console. The panel opens in **paused** mode by default.
+Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
 
-> **Important:** This is an unsupported client modification / self-bot. Discord prohibits automating normal user accounts and may suspend or terminate your account. Changes to Discord's internal code may break this project at any time. Tests use simulated Discord internals; **live account deletion has not been verified**.
+## Status — 25 October 2026
 
-## Current status: live Discord compatibility unverified
+**v3.3 was observed deleting live messages**, but a genuine user test exposed an important bug: a single outgoing message temporarily appeared under two different message IDs, creating **Queued=2**. A separate problem showed rejected HTTP DELETE calls (404 and 429) while the UI's previous error metric stayed at 0.
 
-**The v3.2 client screenshots showed 83–86 false-positive module candidates. The v1.1 diagnostic revealed 83 objects simultaneously matching five unrelated module families. v3.3 now filters likely translation/catch-all Proxies before method detection, following a documented Vencord blacklist mechanism. This is a specific fix for that failure pattern, but real Discord deletion is still unverified.** It does not send/edit/delete messages, fetch a token, read message content, or make any explicit network request.
+The read-only [queue event audit](./diagnostics/QUEUE_AUDIT_README.md) captured the exact sequence:
 
-1. Reload Discord Web to stop any previous AutoDelete instance.
-2. Review and paste `diagnostics/runtime-audit.js` into the browser console.
-3. Share only the aggregate `[AutoDelete Audit]` JSON. It contains no account IDs or messages. Do not share browser cookies, Authorization headers, or tokens.
+- **M2:** `id === nonce N1`, `state: SENDING`, first event `optimistic: true`, later visible in cache with `optimistic: false`.
+- **M3:** `id !== nonce N1`, eventually `state: SENT`, with the same `nonce`. This is the confirmed server ID.
 
-See the [full October 2026 audit (Russian)](./research/AUDIT_2026-10-25_RU.md). The previous audit guided the proxy-filter regression test; if v3.3 still fails, share its filtered-proxy count and module diagnostics without credentials.
+**v3.4 fixes the confirmed-only scheduling error**: it rejects optimistic/SENDING events and `id === nonce` temporary messages before creating jobs, and deduplicates confirmed representations by their nonce. GitHub Actions tests replay this sequence and assert exactly one deletion action against M3. The correction has **not yet been verified in a live Discord session**.
 
+The interface now calls its counters **Attempts** (method invocations, not server-confirmed deletions) and **Caught** (errors visible through return values/promises, not all background HTTP failures). [Issue #2](./issues/2) remains open. Do not interpret Attempts as successful deletions.
+
+For module discovery history see [research audit](./research/AUDIT_2026-10-25_RU.md); v3.3 excluded Discord i18n Proxy false positives and found a usable client module set.
 
 ## QA and field testing
 
-- [Manual QA checklist (v3.3)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
+- [Manual QA checklist (v3.3–v3.4)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
 - [Read-only queue event audit](./diagnostics/QUEUE_AUDIT_README.md) — investigate why one visible outgoing message can create two queued deletions, without invoking any DELETE operations.
-- One live successful deletion was reported by a user; broader correctness and reliability have **not** been verified.
+- v3.3 deletion worked in user testing; v3.4's fix is unit-tested but has not been live-tested. Broad correctness and reliability are unverified.
 
 ## Features
 
@@ -108,7 +110,7 @@ Mocked tests cover multiple runtimes, named exports, safe default, event monitor
 [Discord's self-bot policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) prohibits this category of automation, including scripts that change your own messages. Use of a secondary account doesn't make the method permitted.
 ### Current test status
 
-Version 3.3 passed GitHub Actions checks using mocks, including regression cases with 83 duplicated REST exports, duplicated MessageActions, and genuinely ambiguous deletion functions. **This is not a live Discord test.** If the UI still says ERROR, note the module candidate counts shown in the panel; do not share or extract an authorization token.
+Version 3.4 passed GitHub Actions checks using mocks, including regression cases with 83 duplicated REST exports, duplicated MessageActions, and genuinely ambiguous deletion functions. **This is not a live Discord test.** If the UI still says ERROR, note the module candidate counts shown in the panel; do not share or extract an authorization token.
 
 ### Audit v1.1 (HTTP shape correction)
 
@@ -128,3 +130,14 @@ The command copies the aggregated diagnostic object created by the audit, **not*
 The user's v1.1 read-only audit showed **83 export values that simultaneously resemble UserStore, MessageActions, RestAPI, MessageStore, and SelectedChannelStore**. Their properties were stable on repeated reads and often present as own properties. This is characteristic of caching i18n / catch-all proxies. [Vencord's actual webpack loader](https://github.com/Vendicated/Vencord/blob/main/src/webpack/webpack.ts) explicitly excludes `IntlMessagesProxy` and values that produce non-`undefined` for a nonsense key, because i18n proxies can **cache the synthesized value on first read**. Our previous search did not exclude these modules.
 
 The result explains why `84 distinct deleteMessage functions` was misleading: those may be 83 translation functions generated on demand, plus one real method. **This remains a hypothesis until a live v3.3 run**; we do not log any contents or credentials to verify it.
+
+## Version 3.4 regression and limitations
+
+The field trace demonstrates a confirmed message with `nonce N1` preceded by an optimistic message whose **ID also equals `N1`**. The cache's copy of the optimistic message had `optimistic: false` but still `state: SENDING`. `v3.3` incorrectly queued that temporary ID and then the real server ID, often resulting in a false DELETE 404. The new test reproduces the Flux + cache sequence, including an event with a temporary ID; only the real message gets queued.
+
+- Queue timers are intentionally lost on page refresh and Pause. The script does not guarantee exact timing in suspended tabs.
+- Same-nonce confirmed event representations are deduplicated per channel; nonces remain ephemeral in memory and no message content is logged.
+- HTTP 404 may have other causes and HTTP 429 is a separate rate-limit response. This fix does not resolve all possible HTTP failures or confirm server-side deletion status.
+- The logic for `Caught` still cannot observe a Discord method's asynchronous rejection if that method returns `undefined`; no user tokens are requested.
+
+See [queue duplicate bug #1](./issues/1) and [HTTP failure reporting bug #2](./issues/2). Both require live verification before being marked fully resolved.
