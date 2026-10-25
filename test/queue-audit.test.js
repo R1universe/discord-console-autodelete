@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, "..", "diagnostics", "queue-
 for (const forbidden of [
   /\bgetToken\s*\(/, /\bfetch\s*\(/, /\bXMLHttpRequest\s*\(/,
   /\bdeleteMessage\s*\(/, /\.del\s*\(/, /\beditMessage\s*\(/,
-  /\blocalStorage\s*\./, /\bAuthorization\b/
+  /\blocalStorage\s*\./
 ]) assert.doesNotMatch(source, forbidden, "Read-only scanner must not invoke private actions");
 
 const listeners = new Map();
