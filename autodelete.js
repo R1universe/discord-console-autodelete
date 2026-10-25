@@ -154,7 +154,10 @@
     el("ad-dot").className = "dot " + (state.error ? "error" : state.enabled ? "active" : "paused");
     el("ad-warning").className = "warning" + (state.error ? " error" : "");
     el("ad-warning").textContent = state.error ?
-      "Connection failed: " + state.error : "Self-bots violate Discord's rules. Deletion is not guaranteed and other users may retain copies.";
+      "Connection failed: " + state.error :
+      (state.ready && state.monitor === "Open-channel cache only" ?
+       "LIMITED MODE: Only messages in the currently open channel can be detected. Self-bots violate Discord's rules." :
+       "Self-bots violate Discord's rules. Deletion is not guaranteed and other users may retain copies.");
     el("ad-toggle").disabled = !state.ready;
     el("ad-toggle").textContent = state.enabled ? "Pause · clear queue" : "Enable auto-delete";
     el("ad-toggle").className = "primary" + (state.enabled ? " stop" : "");
