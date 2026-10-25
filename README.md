@@ -1,6 +1,19 @@
-# Discord AutoDelete v3.5
+# Discord AutoDelete v3.6
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.6 — compact dark UI
+
+The dashboard has been redesigned with a **neutral Discord-adjacent charcoal palette**, one restrained blurple accent, and a smaller information footprint:
+
+- Introductory paragraph removed from the primary screen.
+- Large warning and technical metric caveat moved into a **collapsed `Diagnostics & safety`** section (also accessible via the header `?`).
+- Activity Log and manual module reconnect live in the expanded section.
+- **Connection errors remain visible in the main panel**; a limited-coverage warning remains visible if only the current open channel is observed.
+- Server and DM delays, scope, Pause/Enable, metrics and queue status remain in the main panel.
+- The module-discovery, token-handling, timer and deletion logic remains unchanged from v3.5.
+
+See the [complete UX spec and palette](./design/UX_SPEC_v3.6.md). Tests cover the default collapsed layout and the safety/diagnostics entry points. **Visual rendering has not been verified on the user's live Discord browser.**
 
 ## What's new in v3.5 — independent server and DM delays
 
@@ -18,7 +31,7 @@ If channel identity cannot be reliably determined, no deletion is scheduled; the
 ```js
 DiscordAutoDelete.setServerDelay(10) // Only server messages
 DiscordAutoDelete.setDmDelay(60)     // Only DMs and group DMs
-DiscordAutoDelete.setDelay(30) // sets both timers       // Legacy: set BOTH categories to 30s
+DiscordAutoDelete.setDelay(30)       // Legacy: set both categories to 30s
 DiscordAutoDelete.status()           // Shows serverDelaySeconds and dmDelaySeconds
 ```
 
@@ -39,7 +52,7 @@ For module discovery history see [research audit](./research/AUDIT_2026-10-25_RU
 
 ## QA and field testing
 
-- [Manual QA checklist (v3.3–v3.5)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
+- [Manual QA checklist (v3.3–v3.6)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
 - [Read-only queue event audit](./diagnostics/QUEUE_AUDIT_README.md) — investigate why one visible outgoing message can create two queued deletions, without invoking any DELETE operations.
 - v3.3 deletion worked in user testing; v3.4's fix is unit-tested but has not been live-tested. Broad correctness and reliability are unverified.
 
