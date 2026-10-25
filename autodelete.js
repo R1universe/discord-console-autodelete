@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.9 — scope-aware delay controls and simpler toggle; experimental console prototype
+ * Discord AutoDelete v3.10 — refined futuristic dark/glass UI and honest counters; experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.9.0";
+  const VERSION = "3.10.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -54,50 +54,51 @@
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = [
-    /* v3.8: near-black neutral base, low-saturation green on ACTIVE */
-    ":host{all:initial;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#f2f4f3;font-size:13px}",
-    "*{box-sizing:border-box}button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}",
-    ".panel{--ad-bg:#101113;--ad-surface:#1d2023;--ad-hover:#262a2e;--ad-border:#303439;--ad-text:#f1f3f5;--ad-muted:#a2a9af;--ad-dim:#858e95;--ad-accent:#6773ec;--ad-accent-hover:#7a84f6;width:370px;max-width:calc(100vw - 24px);max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#42474a transparent;background:var(--ad-bg);color:var(--ad-text);border:1px solid var(--ad-border);border-radius:14px;box-shadow:0 18px 46px #000b;transition:background .2s,border-color .2s,box-shadow .2s}",
-    ".panel.is-active{--ad-accent:#299b68;--ad-accent-hover:#32ad77;--ad-border:#32684e;--ad-hover:#1c3028;background:#101714;border-color:#2e7d57;box-shadow:0 18px 48px #000b,0 0 0 1px #28a36a20,0 0 25px #2ba66c20}",
-    ".panel.is-error{border-color:#9a4848}",
-    ".head{padding:15px 16px 13px;background:#151719;border-bottom:1px solid #292e31;cursor:grab;touch-action:none;user-select:none}",
-    ".panel.is-active .head{background:#132119;border-bottom-color:#284d39}",
+    /* v3.10 deep graphite glass: blurred Discord-like surfaces, quiet futuristic lines */
+    ":host{all:initial;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#eef1f4;font-size:13px}",
+    "*{box-sizing:border-box}button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.46;cursor:not-allowed}",
+    ".panel{--ad-bg:#0b0d10;--ad-surface:#171b20;--ad-hover:#20262d;--ad-border:#2b3138;--ad-text:#eef1f4;--ad-muted:#a5adb7;--ad-dim:#88929f;--ad-accent:#6f7cff;--ad-accent-hover:#8390ff;--ad-ring:#6879ff55;width:370px;max-width:calc(100vw - 24px);max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#404850 transparent;background:radial-gradient(ellipse 120% 65% at 95% -15%,#6f7cff0b,transparent 67%),linear-gradient(168deg,#111418 0%,#0b0d10 75%);color:var(--ad-text);border:1px solid #2b3138;border-radius:15px;box-shadow:inset 0 1px 0 #ffffff0d,0 24px 55px #000c,0 0 0 1px #0008;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:background .22s,border-color .22s,box-shadow .22s}",
+    ".panel.is-active{--ad-bg:#0d1511;--ad-surface:#18241f;--ad-hover:#203329;--ad-border:#2b6344;--ad-accent:#35c878;--ad-accent-hover:#48d58c;--ad-ring:#35c87855;background:radial-gradient(ellipse 115% 70% at 96% -12%,#35c87817,transparent 65%),linear-gradient(164deg,#111c16 0%,#0b1210 78%);border-color:#2b8a57;box-shadow:inset 0 1px 0 #b7ffcc11,0 24px 58px #000c,0 0 0 1px #2b8a572a,0 0 32px #35c87821}",
+    ".panel.is-error{border-color:#98505a}",
+    ".head{position:relative;padding:15px 16px 14px;background:linear-gradient(120deg,#171b21cb,#101317cc);border-bottom:1px solid #2a303a;cursor:grab;touch-action:none;user-select:none}",
+    ".head:after{content:'';position:absolute;bottom:-1px;left:17px;right:17px;height:1px;background:linear-gradient(90deg,transparent,#6f7cff25,transparent);pointer-events:none}",
+    ".panel.is-active .head{background:linear-gradient(120deg,#15261dce,#0e1813dc);border-bottom-color:#295339}",
+    ".panel.is-active .head:after{background:linear-gradient(90deg,transparent,#35c8784a,transparent)}",
     ".top,.brand,.head-buttons,.fieldrow,.delay{display:flex;align-items:center;gap:8px}.top,.fieldrow{justify-content:space-between}",
-    ".brand-icon{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:10px;background:#6570e519;border:1px solid #6570e540;color:#aeb6ff;font-size:20px}",
-    ".panel.is-active .brand-icon{color:#75dab0;background:#1f9d6126;border-color:#328b615e;box-shadow:0 0 16px #21b77119}",
-    "h1{font-size:15px;line-height:1.2;margin:0;font-weight:720;letter-spacing:-.2px}.muted{color:var(--ad-muted);font-size:11px;margin-top:2px}.version{color:var(--ad-dim);font-size:10px;font-weight:600}",
-    ".head-buttons{gap:5px}.mini{min-width:27px;height:27px;padding:0 6px;border:1px solid #43484c;border-radius:7px;color:#abb2b7;background:#1a1c1f}",
-    ".mini:hover{background:#282c2e;color:#fff}.mini:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #a5d6b9;outline-offset:2px}",
-    ".body{padding:15px 16px 13px}.error-alert{border:1px solid #9a5054;background:#4b232733;color:#f6b9bf;border-radius:9px;padding:9px 11px;font-size:11px;line-height:1.5;margin:0 0 12px;overflow-wrap:anywhere}",
-    ".limited-alert{color:#e0c48c;font-size:11px;line-height:1.5;margin-bottom:10px}",
-    ".primary{display:block;width:100%;border:1px solid #6d78f3;padding:13px 12px;border-radius:10px;background:var(--ad-accent);color:#fff;font-weight:750;font-size:12px;transition:background .2s,box-shadow .2s,border-color .2s;margin:0 0 17px}",
-    ".primary:hover:not(:disabled){background:var(--ad-accent-hover)}",
-    ".panel.is-active .primary{background:#1d8256;color:#f1fff8;border-color:#39a673;box-shadow:0 0 0 1px #2dab6a15,0 0 17px #2fb77823}",
-    ".panel.is-active .primary:hover:not(:disabled){background:#239862}",
-    ".reconnect{width:100%;border:1px solid #555c60;background:#1c2022;padding:9px;border-radius:8px;color:#d2d9d7;margin:0 0 12px}",
-    ".field{margin-bottom:14px}.fieldrow{margin-bottom:7px}label{font-weight:650;font-size:12px;color:#e0e5e2}.hint{font-size:10px;color:var(--ad-dim)}",
-    ".delay{gap:7px}.value{width:79px;min-width:0;padding:10px;border:1px solid #42494a;background:var(--ad-surface);color:var(--ad-text);border-radius:8px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums}",
-    ".value:focus{border-color:var(--ad-accent);box-shadow:0 0 0 2px #528e7433}",
-    ".presets{display:flex;flex:1;gap:5px;min-width:0}.preset{flex:1;min-width:0;border:1px solid #414649;background:var(--ad-surface);color:#acb5b8;border-radius:8px;padding:10px 0;font-size:11px;line-height:1.2}",
-    ".preset:hover{background:var(--ad-hover);color:white}.preset.selected{color:#dfe2ff;border-color:#7581ee;background:#6673ed1e}",
-    ".panel.is-active .preset.selected{color:#c8f7de;background:#1d70432c;border-color:#43a776}",
-    ".scope-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}",
-    ".scope-btn{border:1px solid #41484a;background:#1c2022;color:#c5cbcf;border-radius:9px;padding:11px 4px;font-size:11px;font-weight:650;line-height:1.2;white-space:nowrap}",
-    ".scope-btn:hover{background:var(--ad-hover);color:#fff}.scope-btn.selected{background:#272c44;color:#e0e4ff;border-color:#727dea;box-shadow:inset 0 0 0 1px #6574ef39}",
-    ".panel.is-active .scope-btn.selected{background:#19372a;color:#c9f4dc;border-color:#369a69;box-shadow:inset 0 0 0 1px #2297612f}",
+    ".brand-icon{display:grid;place-items:center;flex:none;width:35px;height:35px;border-radius:11px;background:linear-gradient(145deg,#737fff21,#4656de15);border:1px solid #6f7cff46;box-shadow:inset 0 1px 0 #ffffff10;color:#aeb7ff;font-size:20px}",
+    ".panel.is-active .brand-icon{color:#91ecc0;background:linear-gradient(140deg,#35c87823,#17683a19);border-color:#35c87866;box-shadow:inset 0 1px 0 #ffffff0a,0 0 18px #35c87819}",
+    "h1{font-size:15px;line-height:1.2;margin:0;font-weight:730;letter-spacing:-.25px}.muted{color:var(--ad-muted);font-size:11px;margin-top:3px}.version{color:var(--ad-dim);font-size:10px;font-weight:600}",
+    ".head-buttons{gap:5px}.mini{min-width:27px;height:27px;padding:0 6px;border:1px solid #39424d;border-radius:8px;color:#aeb7c1;background:linear-gradient(135deg,#21262b88,#161b2188);box-shadow:inset 0 1px 0 #ffffff07}",
+    ".mini:hover{background:#2b323a;color:#fff;border-color:#53606e}.mini:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--ad-accent);outline-offset:2px}",
+    ".body{padding:16px 16px 13px}.error-alert{border:1px solid #98505a;background:#4b232740;color:#fac9cf;border-radius:9px;padding:9px 11px;font-size:11px;line-height:1.5;margin:0 0 12px;overflow-wrap:anywhere}",
+    ".limited-alert{color:#dfc68e;font-size:11px;line-height:1.5;margin-bottom:10px}",
+    ".primary{display:block;width:100%;border:1px solid #8892ff66;padding:14px 12px;border-radius:11px;background:linear-gradient(135deg,#7885ff,#5f6cf1);color:#fff;font-weight:740;font-size:12px;letter-spacing:.12px;box-shadow:inset 0 1px 0 #ffffff37,0 6px 18px #515cfc1a;transition:transform .18s,background .18s,box-shadow .2s,border-color .18s;margin:0 0 16px}",
+    ".primary:hover:not(:disabled){background:linear-gradient(135deg,#8793ff,#6d79fa);box-shadow:inset 0 1px 0 #ffffff41,0 8px 25px #6471ff35}.primary:active:not(:disabled){transform:translateY(1px)}",
+    ".panel.is-active .primary{background:linear-gradient(135deg,#238f58,#176e48);border-color:#35c8787a;color:#f3fff7;box-shadow:inset 0 1px 0 #c5ffd026,0 0 22px #35c87824}",
+    ".panel.is-active .primary:hover:not(:disabled){background:linear-gradient(135deg,#2cad6a,#1b8353)}",
+    ".reconnect{width:100%;border:1px solid #3c4650;background:#1d2329;padding:9px;border-radius:9px;color:#d9e0e6;margin:0 0 12px}",
+    ".field{margin-bottom:15px}.fieldrow{margin-bottom:8px}label{font-weight:660;font-size:12px;color:#e4e9ec}.hint{font-size:10px;color:var(--ad-dim)}",
+    ".delay{gap:7px}.value{width:79px;min-width:0;padding:11px 10px;border:1px solid #364049;background:linear-gradient(140deg,#1a1f25ec,#15191ef2);color:var(--ad-text);border-radius:9px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 #ffffff0a}",
+    ".value:focus{border-color:var(--ad-accent);box-shadow:0 0 0 2px var(--ad-ring)}",
+    ".presets{display:flex;flex:1;gap:5px;min-width:0}.preset{flex:1;min-width:0;border:1px solid #35404a;background:linear-gradient(150deg,#1c2228ba,#151a20c9);color:#adb7c1;border-radius:9px;padding:11px 0;font-size:11px;line-height:1.2;box-shadow:inset 0 1px 0 #ffffff08}",
+    ".preset:hover{background:var(--ad-hover);color:#fff}.preset.selected{background:#6f7cff1e;color:#dfe3ff;border-color:#7784ff;box-shadow:inset 0 1px 0 #ffffff09,0 0 0 1px #6f7cff16}",
+    ".panel.is-active .preset.selected{background:#35c87819;color:#d4f8e1;border-color:#35c8789e;box-shadow:0 0 12px #35c87812}",
+    ".scope-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border:1px solid #2b343d;border-radius:12px;background:linear-gradient(160deg,#11161bbd,#171b1fcb);box-shadow:inset 0 1px 3px #0006}",
+    ".scope-btn{border:1px solid transparent;background:transparent;color:#aeb8c2;border-radius:9px;padding:10px 3px;font-size:11px;font-weight:670;line-height:1.3;white-space:nowrap}",
+    ".scope-btn:hover{background:#27303a80;color:#fff}.scope-btn.selected{background:linear-gradient(140deg,#333b60,#242e53);color:#f0f2ff;border-color:#7685ff76;box-shadow:inset 0 1px 0 #ffffff19,0 3px 12px #0006,0 0 13px #6f7cff14}",
+    ".panel.is-active .scope-switch{background:linear-gradient(160deg,#101d16,#17251b);border-color:#2a6345}.panel.is-active .scope-btn.selected{background:linear-gradient(140deg,#28583d,#183b29);color:#e5fff0;border-color:#37b8779c;box-shadow:inset 0 1px 0 #ffffff13,0 2px 12px #0005,0 0 15px #35c87816}",
     ".statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:14px}",
-    ".stat{background:#191c1f;border:1px solid #30363a;padding:9px 5px;border-radius:9px;text-align:center}",
-    ".panel.is-active .stat{border-color:#294636;background:#15221b}",
-    ".stat strong{display:block;font-size:18px;line-height:1.2;letter-spacing:-.4px;color:#f4f7f5;font-variant-numeric:tabular-nums}.stat span{display:block;margin-top:4px;font-size:10px;color:var(--ad-muted)}",
-    ".footer{border-top:1px solid #303438;background:#141719;padding:0 16px}.panel.is-active .footer{border-top-color:#284233;background:#132019}",
-    ".diagnostics{font-size:11px}.diagnostics>summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;color:#bac2c2;cursor:pointer;list-style:none;font-weight:600;user-select:none}",
-    ".diagnostics>summary::-webkit-details-marker{display:none}.diagnostics>summary:after{content:'⌄';font-size:17px;line-height:12px;color:#a5b2ac;transform:translateY(-1px)}.diagnostics[open]>summary:after{transform:rotate(180deg)}",
-    ".diag-body{padding:0 0 14px;border-top:1px solid #383e40}.diag-warning{font-size:11px;line-height:1.55;color:#b3bcbc;padding-top:12px}.diag-warning strong{color:#dae1df}",
-    ".diag-metrics{font-size:10px;line-height:1.5;color:#919c9a;margin:11px 0 12px}.diag-title{margin:11px 0 6px;font-size:10px;letter-spacing:.4px;font-weight:700;color:#afb8b5}",
-    ".loglist{max-height:126px;overflow:auto;scrollbar-width:thin;color:#aeb5b6;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
-    ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#8b9693;margin-right:5px}.logitem.bad{color:#f0a5aa}.logitem.good{color:#90d6b4}",
-    ".footer button.diag-action{border:1px solid #414b48;background:#1d2421;color:#dce3df;border-radius:8px;padding:9px 10px;width:100%;margin-top:12px}.footer button.diag-action:hover{background:#27332d}",
-    ".pill{display:none;align-items:center;gap:10px;background:#141719;border:1px solid #49504d;color:#f3f6f4;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
+    ".stat{background:linear-gradient(150deg,#1b2026c9,#12171cc9);border:1px solid #303944;padding:11px 5px;border-radius:11px;text-align:center;box-shadow:inset 0 1px 0 #ffffff0a}",
+    ".panel.is-active .stat{background:linear-gradient(150deg,#1b3024c7,#101b15d9);border-color:#2e5d42}",
+    ".stat strong{display:block;font-size:20px;line-height:1.15;letter-spacing:-.5px;color:#f3f6f8;font-variant-numeric:tabular-nums}.stat span{display:block;margin-top:6px;font-size:10px;font-weight:500;color:var(--ad-muted)}",
+    ".footer{border-top:1px solid #2b323c;background:linear-gradient(140deg,#14191edf,#101418e8);padding:0 16px}.panel.is-active .footer{border-top-color:#2c543d;background:linear-gradient(140deg,#13251bbd,#101b14d8)}",
+    ".diagnostics{font-size:11px}.diagnostics>summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;color:#bac3cd;cursor:pointer;list-style:none;font-weight:610;user-select:none}",
+    ".diagnostics>summary::-webkit-details-marker{display:none}.diagnostics>summary:after{content:'⌄';font-size:17px;line-height:12px;color:#a8b4bd;transform:translateY(-1px)}.diagnostics[open]>summary:after{transform:rotate(180deg)}",
+    ".diag-body{padding:2px 0 14px;border-top:1px solid #303944}.diag-title{margin:10px 0 7px;font-size:10px;letter-spacing:.4px;font-weight:700;color:#b2bfca}",
+    ".loglist{max-height:135px;overflow:auto;scrollbar-width:thin;color:#aeb9c1;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
+    ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#87929d;margin-right:5px}.logitem.bad{color:#f1a9af}.logitem.good{color:#94dab6}",
+    ".footer button.diag-action{border:1px solid #33404a;background:linear-gradient(140deg,#20272f,#171e25);color:#d8e0e7;border-radius:9px;padding:10px;width:100%;margin-top:12px}.footer button.diag-action:hover{background:#28333b}",
+    ".pill{display:none;align-items:center;gap:10px;background:#13191d;border:1px solid #495460;color:#f3f6f4;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
     ".collapsed .panel{display:none}.collapsed .pill{display:flex}",
     "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:14px}.head{padding:13px 14px}.footer{padding:0 14px}}",
     "@media(prefers-reduced-motion:reduce){.panel,.primary{transition:none}}"
@@ -109,8 +110,8 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.9</span></h1><div class="muted">Timed Discord messages</div></div></div>',
-          '<div class="head-buttons"><button class="mini" id="ad-help" type="button" title="Safety and diagnostics" aria-label="Open safety and diagnostics">?</button><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.10</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="head-buttons"><button class="mini" id="ad-help" type="button" title="Open diagnostics" aria-label="Open diagnostics">?</button><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
       '<div class="body">',
@@ -133,14 +134,12 @@
           '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
         '</div></div></div>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
-        '<div class="stat"><strong id="ad-requests">0</strong><span>Attempts</span></div>',
-        '<div class="stat"><strong id="ad-failed">0</strong><span>Caught</span></div></div>',
+        '<div class="stat" title="Deletion calls attempted; not verified server deletions"><strong id="ad-requests">0</strong><span>Requests</span></div>',
+        '<div class="stat" title="Errors caught by this script; background HTTP failures may not appear"><strong id="ad-failed">0</strong><span>Errors</span></div></div>',
       '</div>',
       '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
-        '<summary>Diagnostics &amp; safety</summary>',
+        '<summary>Diagnostics</summary>',
         '<div class="diag-body">',
-          '<div class="diag-warning" id="ad-warning"><strong>Unofficial account automation.</strong> Using a self-bot can lead to account suspension. Deletion is not guaranteed; others can keep copies.</div>',
-          '<div class="diag-metrics">Attempts count calls, not verified server deletions. Caught only tracks errors surfaced by the call; background HTTP errors may be missed.</div>',
           '<div class="diag-title">ACTIVITY LOG <span class="hint">· No message text stored</span></div>',
           '<div class="loglist" id="ad-logs" aria-live="polite"></div>',
           '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
@@ -190,9 +189,6 @@
     el("ad-error").textContent = state.error ? "Connection failed: " + state.error : "";
     const limited = state.ready && state.monitor === "Open-channel cache only";
     el("ad-limited").style.display = limited ? "block" : "none";
-    el("ad-warning").textContent = limited ?
-      "Unofficial automation with limited coverage: only messages in your open channel may be observed. Discord can suspend the account, and deletion is not guaranteed." :
-      "Unofficial account automation. Discord can suspend or terminate your account. Deletion is not guaranteed, and others may retain copies.";
     el("ad-toggle").disabled = !state.ready;
     el("ad-toggle").textContent = state.enabled ? "Disable" : "Enable";
     el("ad-toggle").setAttribute("title", state.enabled ?
