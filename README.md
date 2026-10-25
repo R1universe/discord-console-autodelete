@@ -82,9 +82,10 @@ Automated tests run against **mocked Discord runtime behavior**, not the live Di
 - [Automated test source](./test/test.js)
 - [Issues and known limitations](https://github.com/R1universe/discord-console-autodelete/issues)
 - [Release history and investigation notes](./docs/RELEASE_HISTORY.md)
+- [Repository description and Topics settings](./docs/REPOSITORY_DISCOVERY.md)
 
-**Discoverability keywords:** Discord auto delete messages, Discord message deletion timer, disappearing Discord messages, Discord self-destruct messages, Discord DM auto-delete, Discord server message auto-delete, JavaScript Discord console script.
+People sometimes search for this type of project as a **Discord disappearing-messages script**, **message self-destruct timer**, or **Discord DM auto-delete tool**. Despite those names, it **does not provide guaranteed, private, or secure disappearing messages**.
 
 ---
 
-If this experiment was useful, you can **Star** the repository to find it again. Bug reports with reproducible steps (without tokens, message content or personal IDs) are welcome.
+If this experiment was useful, you can **Star** the repository to find it again. [Bug reports](https://github.com/R1universe/discord-console-autodelete/issues/new/choose) with reproducible steps (without tokens, message content or personal IDs) are welcome.
