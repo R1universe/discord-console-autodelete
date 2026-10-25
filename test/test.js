@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.12.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.13.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -39,6 +39,7 @@ function fakeElement() {
 let shadow;
 function createEnvironment(options = {}) {
   const ids = new Map();
+  let overlayHost = null;
   const presets = ["servers", "dm"].flatMap(kind =>
     ["4", "60"].map(delay => {
       const e = fakeElement();
@@ -65,7 +66,7 @@ function createEnvironment(options = {}) {
     appendChild() {},
   };
   const document = {
-    body: { appendChild() {} },
+    body: { appendChild(node) { overlayHost = node; } },
     createElement: fakeElement,
     addEventListener() {},
     removeEventListener() {}
@@ -262,7 +263,7 @@ function createEnvironment(options = {}) {
     }
   }
   return {
-    context, window, document, ids, presets, localStorage, account,
+    context, window, document, ids, get overlayHost() { return overlayHost; }, presets, localStorage, account,
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
     flushTimers, timers, deletions, calls, cached, restURLs, stored, presets, scopeButtons,
     proxyReads, tick: () => interval()
@@ -274,8 +275,26 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // v3.12: translucent glass design with icon-free stats and one-second minimum.
-  assert.match(source, /AutoDelete <span class="version">v3\.12<\/span>/);
+  // Minimize must completely hide the overlay, not replace it with a pill.
+  assert.doesNotMatch(source, /id="ad-pill"|ad-pill-text|class="pill"|\.collapsed \.pill/,
+    "No minimized floating launcher or pill remains in the current source");
+  assert.ok(e.overlayHost, "Overlay host was mounted");
+  assert.equal(e.overlayHost.style.display, undefined, "Overlay is initially shown");
+  e.ids.get("ad-min").dispatch("click");
+  assert.equal(e.overlayHost.style.display, "none",
+    "Minimize button fully removes visible overlay, including click surface");
+  assert.equal(api.running, false, "Minimize does not silently start monitoring");
+  api.open();
+  assert.equal(e.overlayHost.style.display, "", "open() restores entire overlay");
+  api.hide();
+  assert.equal(e.overlayHost.style.display, "none", "hide() matches Minimize");
+  api.openDiagnostics();
+  assert.equal(e.overlayHost.style.display, "", "openDiagnostics() also reopens overlay");
+  assert.equal(e.ids.get("ad-diagnostics").open, true,
+    "Diagnostics can be opened after complete minimization");
+
+  // v3.13: full overlay hide, no pill or replacement surface.
+  assert.match(source, /AutoDelete <span class="version">v3\.13<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -402,6 +421,20 @@ function createEnvironment(options = {}) {
   assert.ok(e.ids.get("ad-toggle"), "Dashboard renders without warning text blocks");
 
   assert.equal(api.resume(), true);
+  e.ids.get("ad-min").dispatch("click");
+  assert.equal(e.overlayHost.style.display, "none",
+    "Active monitoring can be visually hidden without disabling itself");
+  assert.equal(api.running, true, "Minimize never stops running auto-delete");
+  e.post("999999999999999995");
+  assert.equal(api.status().pending, 1,
+    "Hidden overlay continues to queue confirmed own messages");
+  api.open();
+  assert.equal(e.overlayHost.style.display, "",
+    "Restored overlay retains monitoring state");
+  await e.flushTimers();
+  assert.deepEqual(e.deletions,
+    [["444444444444444444", "999999999999999995"]],
+    "Queued message is processed while overlay has been hidden");
   assert.ok(panel.classList.contains("is-active"),
     "Resume enables green theme across the panel");
   assert.equal(e.ids.get("ad-toggle").textContent, "Disable",
@@ -412,7 +445,10 @@ function createEnvironment(options = {}) {
   e.post("555555555555555555");
   assert.equal(api.status().pending, 1, "Deduplicate events");
   await e.flushTimers();
-  assert.deepEqual(e.deletions, [["444444444444444444", "555555555555555555"]], "Own message deleted once");
+  assert.deepEqual(e.deletions, [
+    ["444444444444444444", "999999999999999995"],
+    ["444444444444444444", "555555555555555555"]
+  ], "Own message deleted once in addition to the hidden-window test");
 
   api.setDelay(30);
   api.setScope("dm");
@@ -441,7 +477,7 @@ function createEnvironment(options = {}) {
   e.post("888888888888888888");
   e.account.id = "999999999999999999"; // account switch
   await e.flushTimers();
-  assert.equal(e.deletions.length, 1, "Account switch must skip deletion");
+  assert.equal(e.deletions.length, 2, "Account switch must skip deletion");
   assert.equal(api.status().skipped, 2, "Counts scope skip and account switch");
 
   api.stop();
@@ -780,7 +816,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.12 glass states, icon-free stats, one-second timers, presets, scope and queue");
+  console.log("PASS: v3.13 complete hide/restore without pill, background queue, glass UI and one-second timers");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
