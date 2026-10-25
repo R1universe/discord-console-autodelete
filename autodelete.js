@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.4.0";
+  const VERSION = "3.5.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -27,8 +27,11 @@
 
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; } catch {}
+  // Migrate the previous shared delay into both independent settings.
+  const legacyDelay = validDelay(saved.delay) ? Number(saved.delay) : 10;
   const config = {
-    delay: validDelay(saved.delay) ? Number(saved.delay) : 10,
+    serverDelay: validDelay(saved.serverDelay) ? Number(saved.serverDelay) : legacyDelay,
+    dmDelay: validDelay(saved.dmDelay) ? Number(saved.dmDelay) : legacyDelay,
     scope: scopes.has(saved.scope) ? saved.scope : "all"
   };
   const state = {
@@ -95,17 +98,21 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.4</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.5</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
         '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
       '</div>',
       '<div class="body">',
-        '<p class="desc">Automatically delete your own new messages. Choose settings, then enable monitoring.</p>',
+        '<p class="desc">Set independent delays for server channels and direct messages. Only your new messages are affected.</p>',
         '<div class="warning" id="ad-warning">Unofficial account automation can lead to a Discord suspension or ban.</div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-delay">Deletion delay</label><span class="hint">2–86400 sec</span></div>',
-          '<div class="delay"><input class="value" id="ad-delay" type="number" min="2" max="86400" step="1" aria-label="Delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay="5">5s</button><button class="preset" data-delay="10">10s</button><button class="preset" data-delay="30">30s</button><button class="preset" data-delay="60">60s</button>',
+        '<div class="field"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2–86400 sec</span></div>',
+          '<div class="delay"><input class="value" id="ad-server-delay" type="number" min="2" max="86400" step="1" aria-label="Server deletion delay in seconds"><div class="presets">',
+          '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
+        '</div></div></div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2–86400 sec</span></div>',
+          '<div class="delay"><input class="value" id="ad-dm-delay" type="number" min="2" max="86400" step="1" aria-label="DM deletion delay in seconds"><div class="presets">',
+          '<button class="preset" data-delay-for="dm" data-delay="5">5s</button><button class="preset" data-delay-for="dm" data-delay="10">10s</button><button class="preset" data-delay-for="dm" data-delay="30">30s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
         '</div></div></div>',
         '<div class="field"><div class="fieldrow"><label for="ad-scope">Where to delete</label><span class="hint">Your messages only</span></div>',
           '<select id="ad-scope"><option value="all">Everywhere: servers and DMs</option><option value="servers">Servers only</option><option value="dm">DMs and group DMs only</option></select></div>',
@@ -163,11 +170,16 @@
     el("ad-toggle").textContent = state.enabled ? "Pause · clear queue" : "Enable auto-delete";
     el("ad-toggle").className = "primary" + (state.enabled ? " stop" : "");
     el("ad-retry").style.display = state.ready ? "none" : "block";
-    el("ad-delay").value = config.delay;
+    // Refresh numbers except while a user is editing the same input.
+    if (shadow.activeElement !== el("ad-server-delay"))
+      el("ad-server-delay").value = config.serverDelay;
+    if (shadow.activeElement !== el("ad-dm-delay"))
+      el("ad-dm-delay").value = config.dmDelay;
     el("ad-scope").value = config.scope;
-    shadow.querySelectorAll("[data-delay]").forEach(btn =>
-      btn.classList.toggle("selected", Number(btn.dataset.delay) === config.delay)
-    );
+    shadow.querySelectorAll("[data-delay-for]").forEach(btn => {
+      const seconds = btn.dataset.delayFor === "servers" ? config.serverDelay : config.dmDelay;
+      btn.classList.toggle("selected", Number(btn.dataset.delay) === seconds);
+    });
     el("ad-pending").textContent = state.pending.size;
     el("ad-requests").textContent = state.requests;
     el("ad-failed").textContent = state.failed;
@@ -405,16 +417,17 @@
       "; caches=" + runtimes.length);
   }
 
-  function scopeMatches(msg, channelId) {
-    if (config.scope === "all") return true;
-    const channel = hooks.channelStore?.getChannel(channelId);
+  function classifyChannel(msg, channelId) {
+    const channel = hooks?.channelStore?.getChannel(channelId);
     const type = channel?.type;
-    const direct = type === 1 || type === 3;
-    const guild = Boolean(msg.guild_id ?? msg.guildId ?? channel?.guild_id ?? channel?.guildId);
-    // Missing channel metadata is not evidence that the message is a DM.
-    // Fail closed: never delete in DM-only mode when origin is unknown.
-    if (config.scope === "dm") return direct;
-    return guild && !direct;
+    if (type === 1 || type === 3) return "dm"; // DM / group DM
+    const guildId = msg?.guild_id ?? msg?.guildId ?? channel?.guild_id ?? channel?.guildId;
+    if (guildId != null && guildId !== "") return "servers";
+    // Unknown channels are never guessed to be server or DM, even in all scope.
+    return null;
+  }
+  function scopeMatches(kind) {
+    return kind != null && (config.scope === "all" || config.scope === kind);
   }
   // Discord uses a temporary local message whose id may be the client
   // nonce. The cache often lists it as SENDING without optimistic=true.
@@ -439,7 +452,9 @@
     const id = String(msg.id ?? "");
     const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
     if (!validId(id) || !validId(channelId) || state.pending.has(id) || state.processed.has(id)) return;
-    if (!scopeMatches(msg, channelId)) { state.skipped++; return; }
+    const kind = classifyChannel(msg, channelId);
+    if (!scopeMatches(kind)) { state.skipped++; return; }
+    const delaySeconds = kind === "servers" ? config.serverDelay : config.dmDelay;
     // Some clients emit more than one confirmed object for the same send.
     // The client nonce correlates them without reading/storing message text.
     const nonceKey = msg.nonce == null ? null : channelId + ":" + String(msg.nonce);
@@ -452,7 +467,7 @@
         state.processedNonces.delete(state.processedNonces.values().next().value);
     }
     state.detected++;
-    const deadline = Date.now() + config.delay * 1000;
+    const deadline = Date.now() + delaySeconds * 1000;
     const timer = setTimeout(async () => {
       state.pending.delete(id);
       render();
@@ -479,9 +494,9 @@
         notify("Caught delete error: " + String(err?.message ?? err).slice(0, 140), "bad");
       }
       render();
-    }, config.delay * 1000);
-    state.pending.set(id, { timer, deadline });
-    notify("Message queued for " + config.delay + "s.");
+    }, delaySeconds * 1000);
+    state.pending.set(id, { timer, deadline, kind });
+    notify((kind === "dm" ? "DM" : "Server") + " message queued for " + delaySeconds + "s.");
     render();
   }
   function onDelete(event) { cancel(event?.id ?? event?.messageId ?? event?.message?.id); }
@@ -595,13 +610,27 @@
     render();
     return true;
   }
-  function setDelay(value) {
-    if (!validDelay(value)) throw new RangeError("Delay must be between 2 and 86400 seconds.");
-    config.delay = Number(value);
+  function updateDelay(kind, value) {
+    if (!validDelay(value)) throw new RangeError("Delay must be an integer from 2 to 86400 seconds.");
+    const seconds = Number(value);
+    if (kind === "servers") config.serverDelay = seconds;
+    else if (kind === "dm") config.dmDelay = seconds;
+    else throw new RangeError("Delay category must be 'servers' or 'dm'.");
     save();
     render();
-    notify("New delay: " + config.delay + " seconds (new messages only).");
-    return config.delay;
+    notify((kind === "dm" ? "DM" : "Server") + " delay set to " + seconds + "s (new messages only).");
+    return seconds;
+  }
+  function setServerDelay(seconds) { return updateDelay("servers", seconds); }
+  function setDmDelay(seconds) { return updateDelay("dm", seconds); }
+  // Legacy command: sets both delays, keeping older console workflows working.
+  function setDelay(seconds) {
+    if (!validDelay(seconds)) throw new RangeError("Delay must be an integer from 2 to 86400 seconds.");
+    config.serverDelay = config.dmDelay = Number(seconds);
+    save();
+    render();
+    notify("Both delays set to " + seconds + "s (new messages only).");
+    return Number(seconds);
   }
   function setScope(value) {
     if (!scopes.has(value)) throw new RangeError("Scope: all | servers | dm");
@@ -615,11 +644,16 @@
   el("ad-toggle").addEventListener("click", () => state.enabled ? pause() : resume());
   el("ad-retry").addEventListener("click", connect);
   el("ad-retry-foot").addEventListener("click", connect);
-  el("ad-delay").addEventListener("change", event => {
-    try { setDelay(Number(event.target.value)); }
+  el("ad-server-delay").addEventListener("change", event => {
+    try { setServerDelay(Number(event.target.value)); }
     catch (err) { notify(err.message, "bad"); render(); }
   });
-  shadow.querySelectorAll("[data-delay]").forEach(btn => btn.addEventListener("click", () => setDelay(Number(btn.dataset.delay))));
+  el("ad-dm-delay").addEventListener("change", event => {
+    try { setDmDelay(Number(event.target.value)); }
+    catch (err) { notify(err.message, "bad"); render(); }
+  });
+  shadow.querySelectorAll("[data-delay-for]").forEach(btn =>
+    btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
   el("ad-scope").addEventListener("change", event => setScope(event.target.value));
   el("ad-min").addEventListener("click", () => root.classList.add("collapsed"));
   el("ad-pill").addEventListener("click", () => root.classList.remove("collapsed"));
@@ -661,7 +695,8 @@
     status() {
       const snapshot = {
         ready: state.ready, enabled: state.enabled, error: state.error, monitor: state.monitor,
-        delaySeconds: config.delay, scope: config.scope,
+        serverDelaySeconds: config.serverDelay, dmDelaySeconds: config.dmDelay,
+        scope: config.scope,
         filteredProxyExports: hooks?.ignoredProxies ?? 0, pending: state.pending.size,
         requests: state.requests, failed: state.failed, skipped: state.skipped,
         metricsNote: "requests = attempted delete actions; failed = synchronously/awaitably caught errors only; no server confirmation"
@@ -669,7 +704,7 @@
       console.table(snapshot);
       return snapshot;
     },
-    setDelay, setScope, pause, resume, retry: connect, stop
+    setDelay, setServerDelay, setDmDelay, setScope, pause, resume, retry: connect, stop
   };
   Object.defineProperty(window, NAME, { value: controller, configurable: true });
   ticker = setInterval(() => { scanCache(); render(); }, 500);
