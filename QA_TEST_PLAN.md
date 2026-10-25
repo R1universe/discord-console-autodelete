@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.7
+# Manual QA Plan — Discord AutoDelete v3.8
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,20 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.8 quick UI verification (no message deletion necessary)
+
+1. Refresh Discord Web and run the reviewed [autodelete.js](./autodelete.js). Check the title **v3.8**.
+2. The **Enable auto-delete** button must appear above **DMs** and **Servers** timers.
+3. Confirm the old **ACTIVE/PAUSED + LOCAL** header strip and `Queue empty` line are absent.
+4. Check **Where to delete** displays three buttons: Everywhere, Servers, DMs. Try all three; the selected button changes, and `DiscordAutoDelete.status().scope` reflects it.
+5. Before enabling, confirm the panel is near-black and the selected control is muted blue. Enable using the top button: panel border/glow, main action and selected scope button should turn **subtle green**.
+6. Press **Pause · clear queue**: the green treatment must disappear and the panel must return to dark neutral. No message needs to be sent.
+7. Check that numeric DM/Server inputs still accept free typing and presets still work.
+8. Open **Diagnostics & safety** and confirm the risk statement remains accessible. Module connection errors must still display outside Diagnostics.
+9. Check the layout in a narrow browser viewport, including focus rings on segmented buttons.
+
+The code's deletion mechanism and internal monitoring were not intentionally changed. This is a user-interface smoke test, **not proof of complete live deletion reliability**.
 
 ## v3.7 manual custom-input check (no messages need to be sent)
 
