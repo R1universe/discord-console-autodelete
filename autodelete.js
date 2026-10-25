@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.3 — experimental console prototype
+ * Discord AutoDelete v3.6 — refined compact UI; experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.5.0";
+  const VERSION = "3.6.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -54,42 +54,44 @@
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = [
-    ":host{all:initial;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#edf0fa;font-size:13px}",
-    "*{box-sizing:border-box}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.38;cursor:not-allowed}",
-    ".panel{width:370px;max-width:calc(100vw - 30px);background:#11141e;border:1px solid #333b54;border-radius:18px;box-shadow:0 18px 58px #000b,0 2px 8px #0008;overflow:hidden}",
-    ".head{padding:18px 18px 13px;background:linear-gradient(130deg,#202644,#171a29 70%);cursor:grab;touch-action:none;user-select:none}",
-    ".top{display:flex;align-items:center;justify-content:space-between;gap:10px}",
-    ".brand{display:flex;align-items:center;gap:10px}.brand-icon{display:grid;place-items:center;width:35px;height:35px;border-radius:11px;background:#7778ef22;border:1px solid #888aff55;color:#b6b3ff;font-size:20px}",
-    "h1{font-size:15px;line-height:1.2;margin:0;font-weight:720;letter-spacing:-.2px}.muted{color:#9ba4c0;font-size:11px}.version{color:#9298b8;font-size:10px;font-weight:600}",
-    ".head-buttons{display:flex;gap:6px}.mini{min-width:26px;height:27px;padding:0 7px;border:1px solid #4b5370;border-radius:8px;color:#abb2d3;background:#ffffff08}",
-    ".mini:hover{background:#ffffff14}.state{display:flex;align-items:center;justify-content:space-between;margin-top:15px}",
-    ".status{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:#aeb8d5;font-weight:700;letter-spacing:.45px}",
-    ".dot{height:8px;width:8px;border-radius:50%;background:#777e96}.dot.active{background:#49d6a4;box-shadow:0 0 0 4px #49d6a422}.dot.error{background:#ff9a88}.dot.paused{background:#efbf68}",
-    ".body{padding:16px 18px}.desc{color:#a1abc6;font-size:12px;line-height:1.55;margin:0 0 15px}",
-    ".warning{border:1px solid #705b35;border-radius:9px;background:#f8bf4811;padding:9px 11px;color:#dec28b;font-size:11px;line-height:1.45;margin-bottom:15px}",
-    ".warning.error{border-color:#894e60;background:#ff627e13;color:#ffb7c2}",
-    ".field{margin-bottom:15px}.fieldrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}",
-    "label{font-weight:650;font-size:12px;color:#d5d9ef}.hint{font-size:10px;color:#8c97b3}",
-    ".delay{display:flex;gap:8px;align-items:center}.value{width:85px;padding:9px 10px;border:1px solid #3b4562;background:#202638;color:#f1f2ff;border-radius:9px;outline:none}",
-    ".value:focus,select:focus{border-color:#8f91ff;box-shadow:0 0 0 2px #8f91ff22}",
-    ".presets{display:flex;flex:1;gap:5px}.preset{flex:1;border:1px solid #3a445e;background:#222838;color:#aeb6d1;border-radius:8px;padding:9px 0;font-size:11px}",
-    ".preset.selected{color:#dddfff;border-color:#8686fa;background:#8c8aff22}",
-    "select{display:block;width:100%;appearance:auto;padding:10px;background:#202638;color:#ebedfc;border:1px solid #3b4562;border-radius:9px}",
-    ".primary{width:100%;border:0;padding:11px 12px;border-radius:10px;background:#8c8bfa;color:#111325;font-weight:750;font-size:12px}",
-    ".primary:hover:not(:disabled){background:#a4a4ff}.primary.stop{background:#2b344c;color:#e6e9fa;border:1px solid #515d7b}",
-    ".reconnect{margin-top:8px;width:100%;border:1px solid #4c5778;background:transparent;padding:9px;border-radius:9px;color:#c6cdf7}",
-    ".statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:15px}",
-    ".stat{border:1px solid #333b52;background:#1b2030;padding:10px 7px;border-radius:10px;text-align:center}",
-    ".stat strong{display:block;font-size:18px;line-height:1.3;letter-spacing:-.5px;color:#f4f4ff}",
-    ".stat span{font-size:10px;color:#929cb8}.next{font-size:11px;color:#9ca5bc;margin:10px 0 0;text-align:center}",
-    ".logs{margin-top:14px;padding-top:13px;border-top:1px solid #2f3549}.logshead{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;color:#b9c3dd;margin-bottom:8px}",
-    ".loglist{max-height:125px;overflow:auto;scrollbar-width:thin;color:#a5aec8;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
-    ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#65708e;margin-right:5px}.logitem.bad{color:#ffa2b5}.logitem.good{color:#82e0bd}",
-    ".footer{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid #293047;background:#151a27}",
-    ".footer span{color:#8893b0;font-size:10px}.footer button{border:0;background:none;color:#abb5dc;font-size:11px}",
-    ".pill{display:none;align-items:center;gap:10px;background:#171c2a;border:1px solid #5b6485;color:#ecefff;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
+    /* v3.6 palette: Discord-adjacent charcoal, low saturation, single accent */
+    ":host{all:initial;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#f2f3f5;font-size:13px}",
+    "*{box-sizing:border-box}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}",
+    ".panel{--ad-bg:#1e1f22;--ad-surface:#292b30;--ad-surface-hover:#313338;--ad-border:#3a3d44;--ad-text:#f2f3f5;--ad-muted:#b5bac1;--ad-dim:#949ba4;--ad-accent:#5865f2;--ad-accent-hover:#6875f5;width:370px;max-width:calc(100vw - 24px);max-height:calc(100vh - 110px);background:var(--ad-bg);color:var(--ad-text);border:1px solid var(--ad-border);border-radius:14px;box-shadow:0 18px 48px #0009;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#555860 transparent}",
+    ".head{padding:15px 16px 13px;background:#232428;border-bottom:1px solid #35373c;cursor:grab;touch-action:none;user-select:none}",
+    ".top,.brand,.head-buttons,.state,.fieldrow,.delay,.diag-top{display:flex;align-items:center;gap:8px}",
+    ".top,.state,.fieldrow,.diag-top{justify-content:space-between}",
+    ".brand-icon{display:grid;place-items:center;flex:none;width:33px;height:33px;border-radius:10px;background:#5865f21a;border:1px solid #5865f24a;color:#aeb6ff;font-size:19px}",
+    "h1{font-size:15px;line-height:1.2;margin:0;font-weight:720;letter-spacing:-.2px}.muted{color:var(--ad-muted);font-size:11px;margin-top:2px}.version{color:var(--ad-dim);font-size:10px;font-weight:600}",
+    ".head-buttons{gap:5px}.mini{min-width:27px;height:27px;padding:0 6px;border:1px solid #474a52;border-radius:7px;color:var(--ad-muted);background:transparent}",
+    ".mini:hover{background:#35373d;color:#fff}.mini:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #a1aaff;outline-offset:2px}",
+    ".state{margin-top:10px}.status{display:inline-flex;align-items:center;gap:7px;color:#c0c3c9;font-size:11px;font-weight:700;letter-spacing:.35px}",
+    ".dot{height:7px;width:7px;border-radius:50%;background:#777e89}.dot.active{background:#43b581;box-shadow:0 0 0 3px #43b58118}.dot.error{background:#ed6a6a}.dot.paused{background:#d9ab57}",
+    ".body{padding:16px 16px 12px}.error-alert{border:1px solid #8f5258;background:#55292e44;color:#f7bec3;border-radius:8px;padding:9px 11px;font-size:11px;line-height:1.5;margin-bottom:13px;overflow-wrap:anywhere}",
+    ".limited-alert{color:#e0c48c;font-size:11px;line-height:1.5;margin-bottom:10px}",
+    ".field{margin-bottom:14px}.fieldrow{margin-bottom:7px}label{font-weight:650;font-size:12px;color:#e0e2e6}.hint{font-size:10px;color:var(--ad-dim)}",
+    ".delay{gap:7px}.value{width:79px;min-width:0;padding:10px;border:1px solid #474b54;background:var(--ad-surface);color:var(--ad-text);border-radius:8px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums}",
+    ".value:focus,select:focus{border-color:#8993ff;box-shadow:0 0 0 2px #5865f233}",
+    ".presets{display:flex;flex:1;gap:5px;min-width:0}.preset{flex:1;min-width:0;border:1px solid #454850;background:var(--ad-surface);color:var(--ad-muted);border-radius:8px;padding:10px 0;font-size:11px;line-height:1.2}",
+    ".preset:hover{background:var(--ad-surface-hover);color:#fff}.preset.selected{color:#d8ddff;border-color:#7682fa;background:#5865f21d}",
+    "select{display:block;width:100%;padding:10px;background:var(--ad-surface);color:var(--ad-text);border:1px solid #474b54;border-radius:8px;outline:none}",
+    ".primary{display:block;width:100%;border:0;padding:12px;border-radius:8px;background:var(--ad-accent);color:white;font-weight:700;font-size:12px;margin-top:3px}",
+    ".primary:hover:not(:disabled){background:var(--ad-accent-hover)}.primary.stop{background:#34373f;color:#e9ebef;border:1px solid #626672}",
+    ".reconnect{margin-top:9px;width:100%;border:1px solid #626672;background:transparent;padding:9px;border-radius:8px;color:#d2d6dc}",
+    ".statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:14px}",
+    ".stat{border:1px solid #3d4149;background:#26282d;padding:9px 5px;border-radius:8px;text-align:center}",
+    ".stat strong{display:block;font-size:18px;line-height:1.2;letter-spacing:-.4px;color:#f4f5f7;font-variant-numeric:tabular-nums}",
+    ".stat span{display:block;margin-top:4px;font-size:10px;color:var(--ad-muted)}.next{font-size:11px;color:var(--ad-muted);margin:10px 0 0;text-align:center}",
+    ".footer{border-top:1px solid #383b42;background:#232428;padding:0 16px}.diagnostics{font-size:11px}.diagnostics>summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;color:#c5c8d0;cursor:pointer;list-style:none;font-weight:600;user-select:none}",
+    ".diagnostics>summary::-webkit-details-marker{display:none}.diagnostics>summary:after{content:'⌄';font-size:17px;line-height:12px;color:#aeb3bc;transform:translateY(-1px)}.diagnostics[open]>summary:after{transform:rotate(180deg)}",
+    ".diag-body{padding:0 0 14px;border-top:1px solid #383b42}.diag-warning{font-size:11px;line-height:1.55;color:#b5bac1;padding-top:12px}.diag-warning strong{color:#dce0e5}",
+    ".diag-metrics{font-size:10px;line-height:1.5;color:#949ba4;margin:11px 0 12px}.diag-title{margin:11px 0 6px;font-size:10px;letter-spacing:.4px;font-weight:700;color:#aeb3bd}",
+    ".loglist{max-height:126px;overflow:auto;scrollbar-width:thin;color:#b5bac1;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
+    ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#9299a6;margin-right:5px}.logitem.bad{color:#f0a5aa}.logitem.good{color:#90d6b4}",
+    ".footer button.diag-action{border:1px solid #50545e;background:#2e3036;color:#dce0e6;border-radius:8px;padding:9px 10px;width:100%;margin-top:12px}",
+    ".footer button.diag-action:hover{background:#383b44}.pill{display:none;align-items:center;gap:10px;background:#232428;border:1px solid #4c4f59;color:#f2f3f5;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
     ".collapsed .panel{display:none}.collapsed .pill{display:flex}",
-    "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:12px}.head{padding:14px}}"
+    "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:14px}.head{padding:13px 14px}.footer{padding:0 14px}}"
   ].join("\n");
   shadow.appendChild(style);
 
@@ -98,19 +100,19 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.5</span></h1><div class="muted">Timed Discord messages</div></div></div>',
-          '<div class="head-buttons"><button class="mini" id="ad-min" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" title="Stop and close" aria-label="Close">×</button></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.6</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="head-buttons"><button class="mini" id="ad-help" type="button" title="Safety and diagnostics" aria-label="Open safety and diagnostics">?</button><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
         '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
       '</div>',
       '<div class="body">',
-        '<p class="desc">Set independent delays for server channels and direct messages. Only your new messages are affected.</p>',
-        '<div class="warning" id="ad-warning">Unofficial account automation can lead to a Discord suspension or ban.</div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2–86400 sec</span></div>',
+        '<div class="error-alert" id="ad-error" role="alert" style="display:none"></div>',
+        '<div class="limited-alert" id="ad-limited" style="display:none">Limited coverage: current channel only</div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2s–24h</span></div>',
           '<div class="delay"><input class="value" id="ad-server-delay" type="number" min="2" max="86400" step="1" aria-label="Server deletion delay in seconds"><div class="presets">',
           '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
         '</div></div></div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2–86400 sec</span></div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2s–24h</span></div>',
           '<div class="delay"><input class="value" id="ad-dm-delay" type="number" min="2" max="86400" step="1" aria-label="DM deletion delay in seconds"><div class="presets">',
           '<button class="preset" data-delay-for="dm" data-delay="5">5s</button><button class="preset" data-delay-for="dm" data-delay="10">10s</button><button class="preset" data-delay-for="dm" data-delay="30">30s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
         '</div></div></div>',
@@ -121,11 +123,18 @@
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
         '<div class="stat"><strong id="ad-requests">0</strong><span>Attempts</span></div>',
         '<div class="stat"><strong id="ad-failed">0</strong><span>Caught</span></div></div>',
-        '<div class="next" id="ad-next">No scheduled deletions</div>',
-        '<div class="hint" style="text-align:center;margin-top:6px;line-height:1.4">Attempts ≠ confirmed deletions · Caught may miss background HTTP errors</div>',
-        '<div class="logs"><div class="logshead">ACTIVITY LOG <span class="hint">No message content recorded</span></div><div class="loglist" id="ad-logs" aria-live="polite"></div></div>',
+        '<div class="next" id="ad-next">Queue empty</div>',
       '</div>',
-      '<div class="footer"><span>Settings saved locally</span><button id="ad-retry-foot">Reconnect ↻</button></div>',
+      '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
+        '<summary>Diagnostics &amp; safety</summary>',
+        '<div class="diag-body">',
+          '<div class="diag-warning" id="ad-warning"><strong>Unofficial account automation.</strong> Using a self-bot can lead to account suspension. Deletion is not guaranteed; others can keep copies.</div>',
+          '<div class="diag-metrics">Attempts count calls, not verified server deletions. Caught only tracks errors surfaced by the call; background HTTP errors may be missed.</div>',
+          '<div class="diag-title">ACTIVITY LOG <span class="hint">· No message text stored</span></div>',
+          '<div class="loglist" id="ad-logs" aria-live="polite"></div>',
+          '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
+        '</div>',
+      '</details></div>',
     '</section>',
     '<button id="ad-pill" class="pill" type="button" aria-label="Open AutoDelete"><span>◷</span><span id="ad-pill-text">AutoDelete · Off</span></button>'
   ].join("");
@@ -160,12 +169,14 @@
     const mode = state.error ? "ERROR" : !state.ready ? "CONNECTING" : state.enabled ? "ACTIVE" : "PAUSED";
     el("ad-state").textContent = mode;
     el("ad-dot").className = "dot " + (state.error ? "error" : state.enabled ? "active" : "paused");
-    el("ad-warning").className = "warning" + (state.error ? " error" : "");
-    el("ad-warning").textContent = state.error ?
-      "Connection failed: " + state.error :
-      (state.ready && state.monitor === "Open-channel cache only" ?
-       "LIMITED MODE: Only messages in the currently open channel can be detected. Self-bots violate Discord's rules." :
-       "Self-bots violate Discord's rules. Deletion is not guaranteed and other users may retain copies.");
+    // Compact by default. Connection failures remain visible in the main panel.
+    el("ad-error").style.display = state.error ? "block" : "none";
+    el("ad-error").textContent = state.error ? "Connection failed: " + state.error : "";
+    const limited = state.ready && state.monitor === "Open-channel cache only";
+    el("ad-limited").style.display = limited ? "block" : "none";
+    el("ad-warning").textContent = limited ?
+      "Unofficial automation with limited coverage: only messages in your open channel may be observed. Discord can suspend the account, and deletion is not guaranteed." :
+      "Unofficial account automation. Discord can suspend or terminate your account. Deletion is not guaranteed, and others may retain copies.";
     el("ad-toggle").disabled = !state.ready;
     el("ad-toggle").textContent = state.enabled ? "Pause · clear queue" : "Enable auto-delete";
     el("ad-toggle").className = "primary" + (state.enabled ? " stop" : "");
@@ -187,7 +198,7 @@
     const next = jobs.length ? Math.min(...jobs.map(job => job.deadline)) : 0;
     el("ad-next").textContent = next ?
       "Next deletion in " + Math.max(0, Math.ceil((next - Date.now()) / 1000)) + " sec." :
-      "No scheduled deletions";
+      "Queue empty";
     el("ad-pill-text").textContent = "AutoDelete · " + (state.enabled ? "Active" : state.error ? "Error" : "Paused");
   }
 
@@ -655,6 +666,10 @@
   shadow.querySelectorAll("[data-delay-for]").forEach(btn =>
     btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
   el("ad-scope").addEventListener("change", event => setScope(event.target.value));
+  el("ad-help").addEventListener("click", () => {
+    el("ad-diagnostics").open = true;
+    el("ad-diagnostics").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  });
   el("ad-min").addEventListener("click", () => root.classList.add("collapsed"));
   el("ad-pill").addEventListener("click", () => root.classList.remove("collapsed"));
 
@@ -692,6 +707,10 @@
     get connected() { return state.ready; },
     open() { root.classList.remove("collapsed"); },
     hide() { root.classList.add("collapsed"); },
+    openDiagnostics() {
+      root.classList.remove("collapsed");
+      el("ad-diagnostics").open = true;
+    },
     status() {
       const snapshot = {
         ready: state.ready, enabled: state.enabled, error: state.error, monitor: state.monitor,
