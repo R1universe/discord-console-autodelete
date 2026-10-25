@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.6 — refined compact UI; experimental console prototype
+ * Discord AutoDelete v3.7 — DM-first layout and reliable custom time entry; experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.6.0";
+  const VERSION = "3.7.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -100,7 +100,7 @@
     '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.6</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.7</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-help" type="button" title="Safety and diagnostics" aria-label="Open safety and diagnostics">?</button><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
         '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
@@ -108,13 +108,13 @@
       '<div class="body">',
         '<div class="error-alert" id="ad-error" role="alert" style="display:none"></div>',
         '<div class="limited-alert" id="ad-limited" style="display:none">Limited coverage: current channel only</div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2s–24h</span></div>',
-          '<div class="delay"><input class="value" id="ad-server-delay" type="number" min="2" max="86400" step="1" aria-label="Server deletion delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
-        '</div></div></div>',
         '<div class="field"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2s–24h</span></div>',
-          '<div class="delay"><input class="value" id="ad-dm-delay" type="number" min="2" max="86400" step="1" aria-label="DM deletion delay in seconds"><div class="presets">',
+          '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
           '<button class="preset" data-delay-for="dm" data-delay="5">5s</button><button class="preset" data-delay-for="dm" data-delay="10">10s</button><button class="preset" data-delay-for="dm" data-delay="30">30s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
+        '</div></div></div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">2s–24h</span></div>',
+          '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
+          '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
         '</div></div></div>',
         '<div class="field"><div class="fieldrow"><label for="ad-scope">Where to delete</label><span class="hint">Your messages only</span></div>',
           '<select id="ad-scope"><option value="all">Everywhere: servers and DMs</option><option value="servers">Servers only</option><option value="dm">DMs and group DMs only</option></select></div>',
@@ -164,6 +164,10 @@
     else console.info("[AutoDelete] " + message);
   }
 
+  // Track edits independently of ShadowRoot.activeElement to avoid focus
+  // races caused by the hosting Discord client.
+  const editingDelay = new Set();
+
   function render() {
     if (state.destroyed) return;
     const mode = state.error ? "ERROR" : !state.ready ? "CONNECTING" : state.enabled ? "ACTIVE" : "PAUSED";
@@ -181,11 +185,13 @@
     el("ad-toggle").textContent = state.enabled ? "Pause · clear queue" : "Enable auto-delete";
     el("ad-toggle").className = "primary" + (state.enabled ? " stop" : "");
     el("ad-retry").style.display = state.ready ? "none" : "block";
-    // Refresh numbers except while a user is editing the same input.
-    if (shadow.activeElement !== el("ad-server-delay"))
-      el("ad-server-delay").value = config.serverDelay;
-    if (shadow.activeElement !== el("ad-dm-delay"))
-      el("ad-dm-delay").value = config.dmDelay;
+    // Discord can steal focus or route typing through document handlers.
+    // Explicit edit locks prevent the 500ms UI refresh from overwriting
+    // partially typed values (including temporary empty strings).
+    if (!editingDelay.has("servers") && shadow.activeElement !== el("ad-server-delay"))
+      el("ad-server-delay").value = String(config.serverDelay);
+    if (!editingDelay.has("dm") && shadow.activeElement !== el("ad-dm-delay"))
+      el("ad-dm-delay").value = String(config.dmDelay);
     el("ad-scope").value = config.scope;
     shadow.querySelectorAll("[data-delay-for]").forEach(btn => {
       const seconds = btn.dataset.delayFor === "servers" ? config.serverDelay : config.dmDelay;
@@ -655,14 +661,52 @@
   el("ad-toggle").addEventListener("click", () => state.enabled ? pause() : resume());
   el("ad-retry").addEventListener("click", connect);
   el("ad-retry-foot").addEventListener("click", connect);
-  el("ad-server-delay").addEventListener("change", event => {
-    try { setServerDelay(Number(event.target.value)); }
-    catch (err) { notify(err.message, "bad"); render(); }
-  });
-  el("ad-dm-delay").addEventListener("change", event => {
-    try { setDmDelay(Number(event.target.value)); }
-    catch (err) { notify(err.message, "bad"); render(); }
-  });
+  // Preserve manual edits until Enter or blur, with explicit input locks
+  // so the half-second render never resets keystrokes while editing.
+  function bindDelayInput(kind, id) {
+    const input = el(id);
+    const selectedDelay = () => kind === "dm" ? config.dmDelay : config.serverDelay;
+    const commit = () => {
+      const raw = String(input.value ?? "").trim();
+      editingDelay.delete(kind);
+      if (/^\d+$/.test(raw) && validDelay(Number(raw))) {
+        const seconds = Number(raw);
+        if (seconds !== selectedDelay()) updateDelay(kind, seconds);
+        else render();
+      } else {
+        notify("Enter a whole number between 2 and 86400 seconds.", "bad");
+        input.value = String(selectedDelay());
+        render();
+      }
+    };
+    input.addEventListener("focus", () => editingDelay.add(kind));
+    input.addEventListener("input", () => editingDelay.add(kind));
+    // Discord listens for shortcuts and may treat 0-9 as client hotkeys.
+    // Keep typing inside the Shadow DOM control.
+    for (const type of ["keydown", "keyup", "keypress"]) {
+      input.addEventListener(type, event => {
+        event.stopPropagation?.();
+        if (type !== "keydown") return;
+        if (event.key === "Enter") {
+          event.preventDefault?.();
+          input.blur?.();
+          if (editingDelay.has(kind)) commit();
+        } else if (event.key === "Escape") {
+          event.preventDefault?.();
+          editingDelay.delete(kind);
+          input.value = String(selectedDelay());
+          input.blur?.();
+          render();
+        }
+      });
+    }
+    input.addEventListener("change", () => commit());
+    input.addEventListener("blur", () => {
+      if (editingDelay.has(kind)) commit();
+    });
+  }
+  bindDelayInput("dm", "ad-dm-delay");
+  bindDelayInput("servers", "ad-server-delay");
   shadow.querySelectorAll("[data-delay-for]").forEach(btn =>
     btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
   el("ad-scope").addEventListener("change", event => setScope(event.target.value));
