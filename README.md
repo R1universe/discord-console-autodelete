@@ -1,6 +1,19 @@
-# Discord AutoDelete v3.7
+# Discord AutoDelete v3.8
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.8 — black + green interactive redesign
+
+The main panel is now **near-black while paused** and softly **green-accented when auto-delete is active**. It uses a neutral graphite palette (base `#101113`, enabled background `#101714`, enabled border `#2e7d57`) instead of the older blue-charcoal scheme.
+
+- **Enable auto-delete / Pause · clear queue** is the first control directly below the header. The button clearly communicates whether deletion is on; enabling changes the accent, border and glow across the entire panel.
+- The old **ACTIVE / PAUSED · LOCAL** header row is removed. Version remains next to the title, and errors continue to appear as visible alerts.
+- **Where to delete** now uses three side-by-side **Everywhere / Servers / DMs** buttons instead of a browser-native dropdown. The selected button uses `aria-pressed` and the accent switches from subdued blue (off) to green (on).
+- The redundant **Queue empty / Next deletion** line is gone. `Queued`, `Attempts`, and `Caught` remain in the compact statistics row.
+- The **DMs-first** and **Servers-second** timer fields, manual seconds entry, settings migration and scheduling logic are retained from v3.7.
+- **Diagnostics & safety** is still available, collapsed by default. Connection errors and current-channel-only limitations remain visible without expanding it.
+
+See [v3.8 UX specification](./design/UX_SPEC_v3.8.md). Mock-based tests pass, but the new visual layout has **not yet been checked on a real Discord Web session**. Unsupported self-bot automation can put the account at risk.
 
 ## What's new in v3.7 — DM-first and reliable manual time entry
 
