@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.3.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.4.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -240,7 +240,8 @@ function createEnvironment(options = {}) {
   }
   return {
     context, window, document, ids, presets, localStorage, account,
-    post, flushTimers, timers, deletions, calls, cached, restURLs,
+    post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
+    flushTimers, timers, deletions, calls, cached, restURLs,
     proxyReads, tick: () => interval()
   };
 }
@@ -285,6 +286,66 @@ function createEnvironment(options = {}) {
 
   api.stop();
   assert.equal(e.window.DiscordAutoDelete, undefined, "Stop clears controller");
+  // Field regression: one visible outgoing send produces a temporary M2 and
+  // confirmed M3 with the same nonce but different IDs (2026-10-25 audit).
+  // The temporary message enters the cache with optimistic:false, SENDING
+  // and id===nonce, which v3.3 mistakenly scheduled for deletion.
+  const lifecycle = createEnvironment({ withMessageStore: true });
+  vm.runInContext(source, lifecycle.context, { timeout: 3000 });
+  const live = lifecycle.window.DiscordAutoDelete;
+  assert.equal(live.connected, true);
+  live.resume();
+  const channel = "444444444444444444";
+  const nonce = "555555555555555555";
+  const serverId = "666666666666666666";
+  const otherServerId = "777777777777777777";
+  const base = { author: { id: lifecycle.account.id },
+    channel_id: channel, guild_id: "222222222222222222", type: 0 };
+  const M2 = { ...base, id: nonce, nonce, optimistic: true, state: "SENDING" };
+  const M3 = { ...base, id: serverId, nonce, optimistic: true, state: null };
+  lifecycle.emit(M2, { optimistic: true });
+  lifecycle.cached.push({ ...M2, optimistic: false });
+  lifecycle.tick();
+  assert.equal(live.status().pending, 0,
+    "Temporary cache entry in SENDING state with id=nonce must not be queued");
+  lifecycle.emit(M3, { optimistic: true });
+  assert.equal(live.status().pending, 0,
+    "Optimistic event for server ID must not be queued");
+  lifecycle.emit({ ...M3, optimistic: false }, { optimistic: false });
+  lifecycle.cached.push({ ...M3, optimistic: false, state: "SENT" });
+  lifecycle.tick();
+  assert.equal(live.status().pending, 1,
+    "Only confirmed server message M3 queued; cache duplicate ignored");
+  lifecycle.emit({ ...M3, id: otherServerId, optimistic: false });
+  assert.equal(live.status().pending, 1,
+    "Second confirmed representation with same nonce cannot queue a second job");
+  await lifecycle.flushTimers();
+  assert.deepEqual(lifecycle.deletions, [[channel, serverId]],
+    "Only the real confirmed server ID is passed to deleteMessage");
+  assert.equal(live.status().requests, 1, "Attempts count one delete action");
+  assert.equal(live.status().failed, 0);
+  live.stop();
+
+  // Cache-only mode: messages with a nonces not equal to ID may still
+  // transition SENDING -> SENT without changing server ID.
+  const transition = createEnvironment({ withoutDispatcher: true, withMessageStore: true, withRestOnly: true });
+  vm.runInContext(source, transition.context, { timeout: 3000 });
+  const cachedOnly = transition.window.DiscordAutoDelete;
+  cachedOnly.resume();
+  const pendingCache = { ...base, id: serverId, nonce, state: "SENDING" };
+  transition.cached.push(pendingCache);
+  transition.tick();
+  assert.equal(cachedOnly.status().pending, 0,
+    "A SENDING cache message never creates deletion job");
+  pendingCache.state = "SENT";
+  transition.tick();
+  assert.equal(cachedOnly.status().pending, 1,
+    "Same server ID transitioning to SENT is queued on next scan");
+  await transition.flushTimers();
+  assert.deepEqual(transition.restURLs,
+    ["/channels/" + channel + "/messages/" + serverId]);
+  cachedOnly.stop();
+
   const e2 = createEnvironment({ withoutDispatcher: true, withMessageStore: true, withRestOnly: true });
   vm.runInContext(source, e2.context, { timeout: 3000 });
   const fallback = e2.window.DiscordAutoDelete;
@@ -392,7 +453,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: 83 i18n proxies, catch-all proxy, function identity, ambiguity, fallback, REST, scopes and UI");
+  console.log("PASS: live nonce lifecycle, confirmed-only queue, i18n proxies, REST, scope, pause and UI");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
