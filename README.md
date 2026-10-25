@@ -18,6 +18,7 @@ See the [full October 2026 audit (Russian)](./research/AUDIT_2026-10-25_RU.md). 
 ## QA and field testing
 
 - [Manual QA checklist (v3.3)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
+- [Read-only queue event audit](./diagnostics/QUEUE_AUDIT_README.md) — investigate why one visible outgoing message can create two queued deletions, without invoking any DELETE operations.
 - One live successful deletion was reported by a user; broader correctness and reliability have **not** been verified.
 
 ## Features
