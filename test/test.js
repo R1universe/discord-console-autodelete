@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.11.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.12.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -274,8 +274,8 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // v3.11: compact header and symmetric three-part delay controls.
-  assert.match(source, /AutoDelete <span class="version">v3\.11<\/span>/);
+  // v3.12: translucent glass design with icon-free stats and one-second minimum.
+  assert.match(source, /AutoDelete <span class="version">v3\.12<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -298,10 +298,22 @@ function createEnvironment(options = {}) {
     "Requests title preserves precise semantics");
   assert.match(source, /background HTTP failures may not appear/,
     "Errors title explicitly limits what it counts");
-  assert.match(source, /backdrop-filter:blur\(14px\)/,
+  assert.match(source, /backdrop-filter:blur\(28px\) saturate\(165%\)/,
     "Subtle glass effect is applied to the overall panel");
   assert.match(source, /background:radial-gradient/,
     "Panel has quiet ambient futuristic lighting");
+  assert.match(source, /\.panel\.is-active\{[^"\n]*#90ffd1b3/,
+    "Active glass shell changes to green");
+  assert.match(source, /\.panel\{[^"\n]*#d6e0ff75/,
+    "Idle glass shell has a cool translucent stroke");
+  assert.match(source, /\.stat svg,\.stat img,\.stat i\{display:none!important\}/,
+    "Icons are suppressed in all stat cards");
+  assert.match(source, /\.stat strong\{font-size:23px/,
+    "Stat numbers are larger and centered without icons");
+  assert.match(source, /<span class="hint">1s–24h<\/span>/,
+    "UI advertises the new 1-second minimum");
+  assert.doesNotMatch(source, /<div class="stat[^"]*"[^>]*><(?:svg|img|i)[\s>]/,
+    "Stats markup remains icon-free");
   assert.match(source, /\.scope-switch\{[^"\n]*border:1px solid/,
     "Scope segmented control uses one connected capsule");
 
@@ -486,10 +498,10 @@ function createEnvironment(options = {}) {
   assert.equal(manual.status().serverDelaySeconds, 45,
     "Clicking outside commits custom Server seconds");
   dmInput.focus();
-  dmInput.value = "1";
+  dmInput.value = "0";
   dmInput.dispatch("input", { target: dmInput });
   typing.tick();
-  assert.equal(dmInput.value, "1", "Invalid interim values remain editable until commit");
+  assert.equal(dmInput.value, "0", "Invalid interim values remain editable until commit");
   dmInput.blur();
   assert.equal(dmInput.value, "125", "Invalid input restores previously saved value");
   assert.equal(manual.status().dmDelaySeconds, 125);
@@ -504,6 +516,21 @@ function createEnvironment(options = {}) {
   assert.equal(JSON.parse(typing.stored.get("discord-autodelete-ui-v2")).dmDelay, 125);
   manual.stop();
 
+  // A real timer is scheduled for 1000ms when one second is chosen.
+  const quick = createEnvironment();
+  vm.runInContext(source, quick.context, { timeout: 3000 });
+  const quickApi = quick.window.DiscordAutoDelete;
+  quickApi.setDmDelay(1);
+  quickApi.setServerDelay(1);
+  quickApi.resume();
+  quick.post("555555555555555555");
+  quick.post("666666666666666666", quick.account.id, "333333333333333333");
+  assert.deepEqual([...quick.timers.values()].map(t => t.ms), [1000, 1000],
+    "One-second delays schedule one-second browser timers for both channel types");
+  quickApi.pause(); // No HTTP calls needed for this timing test.
+  assert.equal(quickApi.status().pending, 0);
+  quickApi.stop();
+
   // Independent timing: separate server and DM values, no timer rewrites.
   const splitDelays = createEnvironment();
   vm.runInContext(source, splitDelays.context, { timeout: 3000 });
@@ -515,7 +542,11 @@ function createEnvironment(options = {}) {
   assert.equal(dual.setDmDelay(60), 60);
   assert.equal(dual.status().serverDelaySeconds, 5);
   assert.equal(dual.status().dmDelaySeconds, 60);
-  assert.throws(() => dual.setDmDelay(1), /Delay must be an integer/, "Reject too-short DM delay");
+  assert.equal(dual.setDmDelay(1), 1, "One second is now valid");
+  assert.equal(dual.setServerDelay(1), 1, "One-second server delay is valid");
+  dual.setServerDelay(5);
+  dual.setDmDelay(60);
+  assert.throws(() => dual.setDmDelay(0), /Delay must be an integer/, "Reject zero-second delay");
   assert.throws(() => dual.setServerDelay(86401), /Delay must be an integer/, "Reject too-long server delay");
   assert.equal(dual.resume(), true);
   splitDelays.post("555555555555555555"); // Server
@@ -749,7 +780,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.11 clean header, 3 equal delay controls, preset persistence, scopes and queue logic");
+  console.log("PASS: v3.12 glass states, icon-free stats, one-second timers, presets, scope and queue");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
