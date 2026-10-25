@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.7 — DM-first layout and reliable custom time entry; experimental console prototype
+ * Discord AutoDelete v3.8 — black/green state-driven utility UI; experimental console prototype
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.7.0";
+  const VERSION = "3.8.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -54,60 +54,70 @@
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = [
-    /* v3.6 palette: Discord-adjacent charcoal, low saturation, single accent */
-    ":host{all:initial;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#f2f3f5;font-size:13px}",
-    "*{box-sizing:border-box}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}",
-    ".panel{--ad-bg:#1e1f22;--ad-surface:#292b30;--ad-surface-hover:#313338;--ad-border:#3a3d44;--ad-text:#f2f3f5;--ad-muted:#b5bac1;--ad-dim:#949ba4;--ad-accent:#5865f2;--ad-accent-hover:#6875f5;width:370px;max-width:calc(100vw - 24px);max-height:calc(100vh - 110px);background:var(--ad-bg);color:var(--ad-text);border:1px solid var(--ad-border);border-radius:14px;box-shadow:0 18px 48px #0009;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#555860 transparent}",
-    ".head{padding:15px 16px 13px;background:#232428;border-bottom:1px solid #35373c;cursor:grab;touch-action:none;user-select:none}",
-    ".top,.brand,.head-buttons,.state,.fieldrow,.delay,.diag-top{display:flex;align-items:center;gap:8px}",
-    ".top,.state,.fieldrow,.diag-top{justify-content:space-between}",
-    ".brand-icon{display:grid;place-items:center;flex:none;width:33px;height:33px;border-radius:10px;background:#5865f21a;border:1px solid #5865f24a;color:#aeb6ff;font-size:19px}",
+    /* v3.8: near-black neutral base, low-saturation green on ACTIVE */
+    ":host{all:initial;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#f2f4f3;font-size:13px}",
+    "*{box-sizing:border-box}button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}",
+    ".panel{--ad-bg:#101113;--ad-surface:#1d2023;--ad-hover:#262a2e;--ad-border:#303439;--ad-text:#f1f3f5;--ad-muted:#a2a9af;--ad-dim:#858e95;--ad-accent:#6773ec;--ad-accent-hover:#7a84f6;width:370px;max-width:calc(100vw - 24px);max-height:calc(100vh - 110px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#42474a transparent;background:var(--ad-bg);color:var(--ad-text);border:1px solid var(--ad-border);border-radius:14px;box-shadow:0 18px 46px #000b;transition:background .2s,border-color .2s,box-shadow .2s}",
+    ".panel.is-active{--ad-accent:#299b68;--ad-accent-hover:#32ad77;--ad-border:#32684e;--ad-hover:#1c3028;background:#101714;border-color:#2e7d57;box-shadow:0 18px 48px #000b,0 0 0 1px #28a36a20,0 0 25px #2ba66c20}",
+    ".panel.is-error{border-color:#9a4848}",
+    ".head{padding:15px 16px 13px;background:#151719;border-bottom:1px solid #292e31;cursor:grab;touch-action:none;user-select:none}",
+    ".panel.is-active .head{background:#132119;border-bottom-color:#284d39}",
+    ".top,.brand,.head-buttons,.fieldrow,.delay{display:flex;align-items:center;gap:8px}.top,.fieldrow{justify-content:space-between}",
+    ".brand-icon{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:10px;background:#6570e519;border:1px solid #6570e540;color:#aeb6ff;font-size:20px}",
+    ".panel.is-active .brand-icon{color:#75dab0;background:#1f9d6126;border-color:#328b615e;box-shadow:0 0 16px #21b77119}",
     "h1{font-size:15px;line-height:1.2;margin:0;font-weight:720;letter-spacing:-.2px}.muted{color:var(--ad-muted);font-size:11px;margin-top:2px}.version{color:var(--ad-dim);font-size:10px;font-weight:600}",
-    ".head-buttons{gap:5px}.mini{min-width:27px;height:27px;padding:0 6px;border:1px solid #474a52;border-radius:7px;color:var(--ad-muted);background:transparent}",
-    ".mini:hover{background:#35373d;color:#fff}.mini:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #a1aaff;outline-offset:2px}",
-    ".state{margin-top:10px}.status{display:inline-flex;align-items:center;gap:7px;color:#c0c3c9;font-size:11px;font-weight:700;letter-spacing:.35px}",
-    ".dot{height:7px;width:7px;border-radius:50%;background:#777e89}.dot.active{background:#43b581;box-shadow:0 0 0 3px #43b58118}.dot.error{background:#ed6a6a}.dot.paused{background:#d9ab57}",
-    ".body{padding:16px 16px 12px}.error-alert{border:1px solid #8f5258;background:#55292e44;color:#f7bec3;border-radius:8px;padding:9px 11px;font-size:11px;line-height:1.5;margin-bottom:13px;overflow-wrap:anywhere}",
+    ".head-buttons{gap:5px}.mini{min-width:27px;height:27px;padding:0 6px;border:1px solid #43484c;border-radius:7px;color:#abb2b7;background:#1a1c1f}",
+    ".mini:hover{background:#282c2e;color:#fff}.mini:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #a5d6b9;outline-offset:2px}",
+    ".body{padding:15px 16px 13px}.error-alert{border:1px solid #9a5054;background:#4b232733;color:#f6b9bf;border-radius:9px;padding:9px 11px;font-size:11px;line-height:1.5;margin:0 0 12px;overflow-wrap:anywhere}",
     ".limited-alert{color:#e0c48c;font-size:11px;line-height:1.5;margin-bottom:10px}",
-    ".field{margin-bottom:14px}.fieldrow{margin-bottom:7px}label{font-weight:650;font-size:12px;color:#e0e2e6}.hint{font-size:10px;color:var(--ad-dim)}",
-    ".delay{gap:7px}.value{width:79px;min-width:0;padding:10px;border:1px solid #474b54;background:var(--ad-surface);color:var(--ad-text);border-radius:8px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums}",
-    ".value:focus,select:focus{border-color:#8993ff;box-shadow:0 0 0 2px #5865f233}",
-    ".presets{display:flex;flex:1;gap:5px;min-width:0}.preset{flex:1;min-width:0;border:1px solid #454850;background:var(--ad-surface);color:var(--ad-muted);border-radius:8px;padding:10px 0;font-size:11px;line-height:1.2}",
-    ".preset:hover{background:var(--ad-surface-hover);color:#fff}.preset.selected{color:#d8ddff;border-color:#7682fa;background:#5865f21d}",
-    "select{display:block;width:100%;padding:10px;background:var(--ad-surface);color:var(--ad-text);border:1px solid #474b54;border-radius:8px;outline:none}",
-    ".primary{display:block;width:100%;border:0;padding:12px;border-radius:8px;background:var(--ad-accent);color:white;font-weight:700;font-size:12px;margin-top:3px}",
-    ".primary:hover:not(:disabled){background:var(--ad-accent-hover)}.primary.stop{background:#34373f;color:#e9ebef;border:1px solid #626672}",
-    ".reconnect{margin-top:9px;width:100%;border:1px solid #626672;background:transparent;padding:9px;border-radius:8px;color:#d2d6dc}",
+    ".primary{display:block;width:100%;border:1px solid #6d78f3;padding:13px 12px;border-radius:10px;background:var(--ad-accent);color:#fff;font-weight:750;font-size:12px;transition:background .2s,box-shadow .2s,border-color .2s;margin:0 0 17px}",
+    ".primary:hover:not(:disabled){background:var(--ad-accent-hover)}",
+    ".panel.is-active .primary{background:#1d8256;color:#f1fff8;border-color:#39a673;box-shadow:0 0 0 1px #2dab6a15,0 0 17px #2fb77823}",
+    ".panel.is-active .primary:hover:not(:disabled){background:#239862}",
+    ".reconnect{width:100%;border:1px solid #555c60;background:#1c2022;padding:9px;border-radius:8px;color:#d2d9d7;margin:0 0 12px}",
+    ".field{margin-bottom:14px}.fieldrow{margin-bottom:7px}label{font-weight:650;font-size:12px;color:#e0e5e2}.hint{font-size:10px;color:var(--ad-dim)}",
+    ".delay{gap:7px}.value{width:79px;min-width:0;padding:10px;border:1px solid #42494a;background:var(--ad-surface);color:var(--ad-text);border-radius:8px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums}",
+    ".value:focus{border-color:var(--ad-accent);box-shadow:0 0 0 2px #528e7433}",
+    ".presets{display:flex;flex:1;gap:5px;min-width:0}.preset{flex:1;min-width:0;border:1px solid #414649;background:var(--ad-surface);color:#acb5b8;border-radius:8px;padding:10px 0;font-size:11px;line-height:1.2}",
+    ".preset:hover{background:var(--ad-hover);color:white}.preset.selected{color:#dfe2ff;border-color:#7581ee;background:#6673ed1e}",
+    ".panel.is-active .preset.selected{color:#c8f7de;background:#1d70432c;border-color:#43a776}",
+    ".scope-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}",
+    ".scope-btn{border:1px solid #41484a;background:#1c2022;color:#c5cbcf;border-radius:9px;padding:11px 4px;font-size:11px;font-weight:650;line-height:1.2;white-space:nowrap}",
+    ".scope-btn:hover{background:var(--ad-hover);color:#fff}.scope-btn.selected{background:#272c44;color:#e0e4ff;border-color:#727dea;box-shadow:inset 0 0 0 1px #6574ef39}",
+    ".panel.is-active .scope-btn.selected{background:#19372a;color:#c9f4dc;border-color:#369a69;box-shadow:inset 0 0 0 1px #2297612f}",
     ".statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:14px}",
-    ".stat{border:1px solid #3d4149;background:#26282d;padding:9px 5px;border-radius:8px;text-align:center}",
-    ".stat strong{display:block;font-size:18px;line-height:1.2;letter-spacing:-.4px;color:#f4f5f7;font-variant-numeric:tabular-nums}",
-    ".stat span{display:block;margin-top:4px;font-size:10px;color:var(--ad-muted)}.next{font-size:11px;color:var(--ad-muted);margin:10px 0 0;text-align:center}",
-    ".footer{border-top:1px solid #383b42;background:#232428;padding:0 16px}.diagnostics{font-size:11px}.diagnostics>summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;color:#c5c8d0;cursor:pointer;list-style:none;font-weight:600;user-select:none}",
-    ".diagnostics>summary::-webkit-details-marker{display:none}.diagnostics>summary:after{content:'⌄';font-size:17px;line-height:12px;color:#aeb3bc;transform:translateY(-1px)}.diagnostics[open]>summary:after{transform:rotate(180deg)}",
-    ".diag-body{padding:0 0 14px;border-top:1px solid #383b42}.diag-warning{font-size:11px;line-height:1.55;color:#b5bac1;padding-top:12px}.diag-warning strong{color:#dce0e5}",
-    ".diag-metrics{font-size:10px;line-height:1.5;color:#949ba4;margin:11px 0 12px}.diag-title{margin:11px 0 6px;font-size:10px;letter-spacing:.4px;font-weight:700;color:#aeb3bd}",
-    ".loglist{max-height:126px;overflow:auto;scrollbar-width:thin;color:#b5bac1;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
-    ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#9299a6;margin-right:5px}.logitem.bad{color:#f0a5aa}.logitem.good{color:#90d6b4}",
-    ".footer button.diag-action{border:1px solid #50545e;background:#2e3036;color:#dce0e6;border-radius:8px;padding:9px 10px;width:100%;margin-top:12px}",
-    ".footer button.diag-action:hover{background:#383b44}.pill{display:none;align-items:center;gap:10px;background:#232428;border:1px solid #4c4f59;color:#f2f3f5;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
+    ".stat{background:#191c1f;border:1px solid #30363a;padding:9px 5px;border-radius:9px;text-align:center}",
+    ".panel.is-active .stat{border-color:#294636;background:#15221b}",
+    ".stat strong{display:block;font-size:18px;line-height:1.2;letter-spacing:-.4px;color:#f4f7f5;font-variant-numeric:tabular-nums}.stat span{display:block;margin-top:4px;font-size:10px;color:var(--ad-muted)}",
+    ".footer{border-top:1px solid #303438;background:#141719;padding:0 16px}.panel.is-active .footer{border-top-color:#284233;background:#132019}",
+    ".diagnostics{font-size:11px}.diagnostics>summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;color:#bac2c2;cursor:pointer;list-style:none;font-weight:600;user-select:none}",
+    ".diagnostics>summary::-webkit-details-marker{display:none}.diagnostics>summary:after{content:'⌄';font-size:17px;line-height:12px;color:#a5b2ac;transform:translateY(-1px)}.diagnostics[open]>summary:after{transform:rotate(180deg)}",
+    ".diag-body{padding:0 0 14px;border-top:1px solid #383e40}.diag-warning{font-size:11px;line-height:1.55;color:#b3bcbc;padding-top:12px}.diag-warning strong{color:#dae1df}",
+    ".diag-metrics{font-size:10px;line-height:1.5;color:#919c9a;margin:11px 0 12px}.diag-title{margin:11px 0 6px;font-size:10px;letter-spacing:.4px;font-weight:700;color:#afb8b5}",
+    ".loglist{max-height:126px;overflow:auto;scrollbar-width:thin;color:#aeb5b6;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
+    ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#8b9693;margin-right:5px}.logitem.bad{color:#f0a5aa}.logitem.good{color:#90d6b4}",
+    ".footer button.diag-action{border:1px solid #414b48;background:#1d2421;color:#dce3df;border-radius:8px;padding:9px 10px;width:100%;margin-top:12px}.footer button.diag-action:hover{background:#27332d}",
+    ".pill{display:none;align-items:center;gap:10px;background:#141719;border:1px solid #49504d;color:#f3f6f4;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
     ".collapsed .panel{display:none}.collapsed .pill{display:flex}",
-    "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:14px}.head{padding:13px 14px}.footer{padding:0 14px}}"
+    "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:14px}.head{padding:13px 14px}.footer{padding:0 14px}}",
+    "@media(prefers-reduced-motion:reduce){.panel,.primary{transition:none}}"
   ].join("\n");
   shadow.appendChild(style);
 
   const root = document.createElement("div");
   root.innerHTML = [
-    '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
+    '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.7</span></h1><div class="muted">Timed Discord messages</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.8</span></h1><div class="muted">Timed Discord messages</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-help" type="button" title="Safety and diagnostics" aria-label="Open safety and diagnostics">?</button><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
-        '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">CONNECTING</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
       '</div>',
       '<div class="body">',
         '<div class="error-alert" id="ad-error" role="alert" style="display:none"></div>',
         '<div class="limited-alert" id="ad-limited" style="display:none">Limited coverage: current channel only</div>',
+        '<button class="primary" id="ad-toggle" disabled>Checking connection…</button>',
+        '<button class="reconnect" id="ad-retry" style="display:none">Retry connection</button>',
         '<div class="field"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">2s–24h</span></div>',
           '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
           '<button class="preset" data-delay-for="dm" data-delay="5">5s</button><button class="preset" data-delay-for="dm" data-delay="10">10s</button><button class="preset" data-delay-for="dm" data-delay="30">30s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
@@ -116,14 +126,15 @@
           '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
           '<button class="preset" data-delay-for="servers" data-delay="5">5s</button><button class="preset" data-delay-for="servers" data-delay="10">10s</button><button class="preset" data-delay-for="servers" data-delay="30">30s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
         '</div></div></div>',
-        '<div class="field"><div class="fieldrow"><label for="ad-scope">Where to delete</label><span class="hint">Your messages only</span></div>',
-          '<select id="ad-scope"><option value="all">Everywhere: servers and DMs</option><option value="servers">Servers only</option><option value="dm">DMs and group DMs only</option></select></div>',
-        '<button class="primary" id="ad-toggle" disabled>Checking connection…</button>',
-        '<button class="reconnect" id="ad-retry" style="display:none">Retry connection</button>',
+        '<div class="field"><div class="fieldrow"><label id="ad-scope-label">Where to delete</label><span class="hint">Your messages only</span></div>',
+          '<div class="scope-switch" role="group" aria-labelledby="ad-scope-label">',
+            '<button type="button" class="scope-btn" data-scope="all" aria-pressed="true">Everywhere</button>',
+            '<button type="button" class="scope-btn" data-scope="servers" aria-pressed="false">Servers</button>',
+            '<button type="button" class="scope-btn" data-scope="dm" aria-pressed="false">DMs</button>',
+          '</div></div>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
         '<div class="stat"><strong id="ad-requests">0</strong><span>Attempts</span></div>',
         '<div class="stat"><strong id="ad-failed">0</strong><span>Caught</span></div></div>',
-        '<div class="next" id="ad-next">Queue empty</div>',
       '</div>',
       '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
         '<summary>Diagnostics &amp; safety</summary>',
@@ -170,9 +181,10 @@
 
   function render() {
     if (state.destroyed) return;
-    const mode = state.error ? "ERROR" : !state.ready ? "CONNECTING" : state.enabled ? "ACTIVE" : "PAUSED";
-    el("ad-state").textContent = mode;
-    el("ad-dot").className = "dot " + (state.error ? "error" : state.enabled ? "active" : "paused");
+    const isActive = state.ready && state.enabled && !state.error;
+    const panel = el("ad-panel");
+    panel.classList.toggle("is-active", isActive);
+    panel.classList.toggle("is-error", Boolean(state.error));
     // Compact by default. Connection failures remain visible in the main panel.
     el("ad-error").style.display = state.error ? "block" : "none";
     el("ad-error").textContent = state.error ? "Connection failed: " + state.error : "";
@@ -192,7 +204,11 @@
       el("ad-server-delay").value = String(config.serverDelay);
     if (!editingDelay.has("dm") && shadow.activeElement !== el("ad-dm-delay"))
       el("ad-dm-delay").value = String(config.dmDelay);
-    el("ad-scope").value = config.scope;
+    shadow.querySelectorAll("[data-scope]").forEach(btn => {
+      const selected = btn.dataset.scope === config.scope;
+      btn.classList.toggle("selected", selected);
+      btn.setAttribute("aria-pressed", String(selected));
+    });
     shadow.querySelectorAll("[data-delay-for]").forEach(btn => {
       const seconds = btn.dataset.delayFor === "servers" ? config.serverDelay : config.dmDelay;
       btn.classList.toggle("selected", Number(btn.dataset.delay) === seconds);
@@ -200,11 +216,7 @@
     el("ad-pending").textContent = state.pending.size;
     el("ad-requests").textContent = state.requests;
     el("ad-failed").textContent = state.failed;
-    const jobs = [...state.pending.values()];
-    const next = jobs.length ? Math.min(...jobs.map(job => job.deadline)) : 0;
-    el("ad-next").textContent = next ?
-      "Next deletion in " + Math.max(0, Math.ceil((next - Date.now()) / 1000)) + " sec." :
-      "Queue empty";
+
     el("ad-pill-text").textContent = "AutoDelete · " + (state.enabled ? "Active" : state.error ? "Error" : "Paused");
   }
 
@@ -709,7 +721,8 @@
   bindDelayInput("servers", "ad-server-delay");
   shadow.querySelectorAll("[data-delay-for]").forEach(btn =>
     btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
-  el("ad-scope").addEventListener("change", event => setScope(event.target.value));
+  shadow.querySelectorAll("[data-scope]").forEach(btn =>
+    btn.addEventListener("click", () => setScope(btn.dataset.scope)));
   el("ad-help").addEventListener("click", () => {
     el("ad-diagnostics").open = true;
     el("ad-diagnostics").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
