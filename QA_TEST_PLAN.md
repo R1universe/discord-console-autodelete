@@ -1,6 +1,6 @@
-# Manual QA Plan — Discord AutoDelete v3.3
+# Manual QA Plan — Discord AutoDelete v3.4
 
-**Status (October 25, 2026):** The user reports passing **all 9 initial manual scenarios** from the chat's QA checklist: one-message timer, 3 sequential messages, Pause, changed delay, server/DM scope, channel switching, other-author safety, reload behavior, and background-tab behavior. The first and third have screenshots; most others are user-reported without full logs. Two **unresolved bugs** were observed: [one visible message with two pending jobs](https://github.com/R1universe/discord-console-autodelete/issues/1) and [HTTP 404 with UI Errors=0](https://github.com/R1universe/discord-console-autodelete/issues/2). This does **not** establish a clean release.
+**Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
 **Scope:** Voluntary, low-volume checks on a personal test server or with consenting DM participants. All tests use harmless content. Do not stress-test Discord's API, spam, send bulk messages, or use private conversations without permission.
 
@@ -11,10 +11,21 @@
 - Read the JavaScript source before running it. Never share a Discord account token, cookie or Authorization header.
 - Close unrelated sensitive chats and use a test channel.
 - After clicking **Pause** or closing the overlay, all pending timers are cancelled; after a refresh, the script and its pending queue disappear.
-- The UI's **Requests** counter means a deletion method completed without throwing. It is **not** independent proof that Discord removed a message.
+- v3.4 labels counters **Attempts** (delete method invocations) and **Caught** (failures visible through the call/promise); neither is proof of complete server deletion or all background HTTP errors.
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.4 focused verification — one message, no deletion required
+
+1. Refresh Discord Web to unload older scripts. Review [autodelete.js](./autodelete.js) before running.
+2. In your own test server select `Servers only` and `60 seconds`.
+3. Enable AutoDelete and send exactly one harmless message.
+4. The expected immediate `Queued` value is **1**, not 2; there should be only one scheduling log line.
+5. Press **Pause** before 60 seconds. `Queued` should fall to **0** and the message should remain.
+6. Record PASS/FAIL and any sanitized Activity Log observations. This tests queue scheduling without more Discord DELETE requests.
+
+**Do not mark issue #1 resolved until this is observed in the real client.** A later separate low-volume actual delete test can validate the confirmed ID is deleted if appropriate; respect Discord rate limits.
 
 ## Actual manual test observations — 2026-10-25
 
