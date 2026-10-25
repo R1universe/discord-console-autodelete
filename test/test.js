@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.4.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.5.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -29,11 +29,14 @@ function fakeElement() {
 let shadow;
 function createEnvironment(options = {}) {
   const ids = new Map();
-  const presets = ["5", "10", "30", "60"].map(delay => {
-    const e = fakeElement();
-    e.dataset.delay = delay;
-    return e;
-  });
+  const presets = ["servers", "dm"].flatMap(kind =>
+    ["5", "10", "30", "60"].map(delay => {
+      const e = fakeElement();
+      e.dataset.delay = delay;
+      e.dataset.delayFor = kind;
+      return e;
+    })
+  );
   shadow = {
     getElementById(id) {
       if (!ids.has(id)) ids.set(id, fakeElement());
@@ -48,7 +51,7 @@ function createEnvironment(options = {}) {
     addEventListener() {},
     removeEventListener() {}
   };
-  const stored = new Map();
+  const stored = new Map(options.initialStorage ?? []);
   const localStorage = {
     setItem(k,v) { stored.set(k,v); },
     getItem(k) { return stored.get(k) ?? null; }
@@ -241,7 +244,7 @@ function createEnvironment(options = {}) {
   return {
     context, window, document, ids, presets, localStorage, account,
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
-    flushTimers, timers, deletions, calls, cached, restURLs,
+    flushTimers, timers, deletions, calls, cached, restURLs, stored, presets,
     proxyReads, tick: () => interval()
   };
 }
@@ -266,7 +269,8 @@ function createEnvironment(options = {}) {
 
   api.setDelay(30);
   api.setScope("dm");
-  assert.equal(api.status().delaySeconds, 30);
+  assert.equal(api.status().serverDelaySeconds, 30);
+  assert.equal(api.status().dmDelaySeconds, 30);
   e.post("666666666666666666", e.account.id, "444444444444444444");
   assert.equal(api.status().pending, 0, "Skip server message under DM scope");
   e.post("777777777777777777", e.account.id, "333333333333333333");
@@ -286,6 +290,83 @@ function createEnvironment(options = {}) {
 
   api.stop();
   assert.equal(e.window.DiscordAutoDelete, undefined, "Stop clears controller");
+  // Independent timing: separate server and DM values, no timer rewrites.
+  const splitDelays = createEnvironment();
+  vm.runInContext(source, splitDelays.context, { timeout: 3000 });
+  const dual = splitDelays.window.DiscordAutoDelete;
+  assert.equal(dual.connected, true);
+  assert.equal(dual.status().serverDelaySeconds, 10);
+  assert.equal(dual.status().dmDelaySeconds, 10);
+  assert.equal(dual.setServerDelay(5), 5);
+  assert.equal(dual.setDmDelay(60), 60);
+  assert.equal(dual.status().serverDelaySeconds, 5);
+  assert.equal(dual.status().dmDelaySeconds, 60);
+  assert.throws(() => dual.setDmDelay(1), RangeError, "Reject too-short DM delay");
+  assert.throws(() => dual.setServerDelay(86401), RangeError, "Reject too-long server delay");
+  assert.equal(dual.resume(), true);
+  splitDelays.post("555555555555555555"); // Server
+  splitDelays.post("666666666666666666", splitDelays.account.id, "333333333333333333"); // DM
+  assert.equal(dual.status().pending, 2);
+  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000],
+    "Different timer durations for server and DM messages");
+  // Changing a delay must not alter the scheduled timers.
+  dual.setServerDelay(30);
+  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000],
+    "Old pending deadlines remain intact after changing a setting");
+  const settingsStored = JSON.parse(splitDelays.stored.get("discord-autodelete-ui-v2"));
+  assert.equal(settingsStored.serverDelay, 30);
+  assert.equal(settingsStored.dmDelay, 60);
+  const uiServers = splitDelays.presets.find(p => p.dataset.delayFor === "servers" && p.dataset.delay === "10");
+  const uiDm = splitDelays.presets.find(p => p.dataset.delayFor === "dm" && p.dataset.delay === "30");
+  uiServers.dispatch("click");
+  uiDm.dispatch("click");
+  assert.equal(dual.status().serverDelaySeconds, 10, "Server preset only changes server delay");
+  assert.equal(dual.status().dmDelaySeconds, 30, "DM preset only changes DM delay");
+  dual.pause();
+  assert.equal(dual.status().pending, 0);
+  dual.stop();
+
+  // Simulate reloading with already persisted settings.
+  const persisted = createEnvironment({ initialStorage: [
+    ["discord-autodelete-ui-v2", splitDelays.stored.get("discord-autodelete-ui-v2")]
+  ] });
+  vm.runInContext(source, persisted.context, { timeout: 3000 });
+  const afterReload = persisted.window.DiscordAutoDelete;
+  assert.equal(afterReload.status().serverDelaySeconds, 10);
+  assert.equal(afterReload.status().dmDelaySeconds, 30);
+  assert.equal(afterReload.running, false, "Never enable by default after reload");
+  afterReload.stop();
+
+  // Legacy single-delay settings migrate to both categories, preserving value.
+  const previous = createEnvironment({ initialStorage: [
+    ["discord-autodelete-ui-v2", JSON.stringify({ delay: 42, scope: "all" })]
+  ] });
+  vm.runInContext(source, previous.context, { timeout: 3000 });
+  const legacyApi = previous.window.DiscordAutoDelete;
+  assert.equal(legacyApi.status().serverDelaySeconds, 42);
+  assert.equal(legacyApi.status().dmDelaySeconds, 42);
+  assert.equal(legacyApi.setDelay(20), 20, "Legacy setDelay still works");
+  assert.equal(legacyApi.status().serverDelaySeconds, 20);
+  assert.equal(legacyApi.status().dmDelaySeconds, 20);
+  legacyApi.stop();
+
+  // The channel must be classifiable even if scope='all'; don't assign a
+  // potentially destructive timer by guessing unknown channel origin.
+  const ambiguous = createEnvironment({ withoutChannelStore: true });
+  vm.runInContext(source, ambiguous.context, { timeout: 3000 });
+  const ambiguousApi = ambiguous.window.DiscordAutoDelete;
+  ambiguousApi.setScope("all");
+  ambiguousApi.resume();
+  ambiguous.emit({
+    id: "555555555555555555",
+    author: { id: ambiguous.account.id },
+    channel_id: "999999999999999999",
+    state: "SENT"
+  });
+  assert.equal(ambiguousApi.status().pending, 0,
+    "Unknown channel type must not pick a default server or DM timeout");
+  ambiguousApi.stop();
+
   // Field regression: one visible outgoing send produces a temporary M2 and
   // confirmed M3 with the same nonce but different IDs (2026-10-25 audit).
   // The temporary message enters the cache with optimistic:false, SENDING
@@ -453,7 +534,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: live nonce lifecycle, confirmed-only queue, i18n proxies, REST, scope, pause and UI");
+  console.log("PASS: independent server/DM delays, persistence, migration, confirmed nonce lifecycle, REST, scopes and UI");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
