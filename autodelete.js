@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.1.0";
+  const VERSION = "3.2.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -272,14 +272,37 @@
       notes[label] = pool.length + " candidates" + (preferred.length ? " (" + preferred.length + " preferred)" : "");
       return chosen;
     }
+    // Discord's Webpack caches can contain many *different wrapper objects*
+    // that re-export the very same operation. Count distinct METHOD references,
+    // not wrapper objects. If method identity is not unique, fail closed.
+    function pickByMethod(pool, method, label, notes, preference) {
+      const methods = new Map();
+      for (const obj of pool) {
+        let fn;
+        try { fn = obj?.[method]; } catch { continue; }
+        if (typeof fn !== "function") continue;
+        if (!methods.has(fn)) methods.set(fn, []);
+        methods.get(fn).push(obj);
+      }
+      notes[label] = pool.length + " wrappers / " + methods.size + " distinct " + method + " functions";
+      if (methods.size !== 1) return null;
+      const wrappers = [...methods.values()][0];
+      const preferred = wrappers.filter(x => {
+        try { return Boolean(preference?.(x)); } catch { return false; }
+      });
+      // When all wrappers have the same method reference, picking one of them
+      // does not pick a different operation. Prioritize a direct HTTP owner.
+      return preferred[0] ?? wrappers[0] ?? null;
+    }
 
     const notes = {};
     const userCandidates = matches(x => typeof x?.getCurrentUser === "function" && typeof x?.getUser === "function");
     const users = pick(userCandidates, storeNamed("UserStore"), "UserStore", notes);
     const actionCandidates = matches(x => typeof x?.deleteMessage === "function");
-    const actions = pick(actionCandidates,
-      x => typeof x?.startEditMessage === "function" || typeof x?.editMessage === "function",
-      "MessageActions", notes);
+    const actions = pickByMethod(actionCandidates, "deleteMessage",
+      "MessageActions", notes, x =>
+        Object.prototype.hasOwnProperty.call(x, "deleteMessage") &&
+        (typeof x.startEditMessage === "function" || typeof x.editMessage === "function"));
 
     // Equicord and other Vencord-derived code discovers getAPIBaseURL and
     // returns mod.HTTP ?? mod. The HTTP transport can live one level DEEPER
@@ -297,10 +320,11 @@
     const taggedDirect = restDirect.filter(x => typeof x.getAPIBaseURL === "function");
     const restCandidates = unique([...restFromWrappers, ...taggedDirect, ...restDirect]);
     const explicitlyTagged = unique([...restFromWrappers, ...taggedDirect]);
-    const rest = explicitlyTagged.length === 1 ? explicitlyTagged[0] :
-      explicitlyTagged.length === 0 && restCandidates.length === 1 ? restCandidates[0] : null;
-    notes.RestAPI = restCandidates.length + " candidates; " +
-      wrappers.length + " getAPIBaseURL wrappers; " + explicitlyTagged.length + " tagged transports";
+    const preferredTransportPool = explicitlyTagged.length ? explicitlyTagged : restCandidates;
+    const rest = pickByMethod(preferredTransportPool, "del",
+      "RestAPI", notes, x =>
+        Object.prototype.hasOwnProperty.call(x, "del") && typeof x.getAPIBaseURL === "function");
+    notes.RestAPI += "; " + wrappers.length + " getAPIBaseURL wrappers";
 
     const store = pick(matches(x => typeof x?.getMessages === "function" &&
       typeof x?.getMessage === "function"), storeNamed("MessageStore"), "MessageStore", notes);
