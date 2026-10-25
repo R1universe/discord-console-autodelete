@@ -21,5 +21,5 @@ for (const item of ["autodelete.js", "QA_TEST_PLAN.md", "docs/RELEASE_HISTORY.md
   assert.ok(fs.existsSync(path.join(root, item)), "Linked documentation exists: " + item);
 }
 assert.match(en, /Discord prohibits/i, "Self-bot risk visible in current README");
-assert.match(en, /not server-confirmed/i, "Counters do not overstate deletion success");
+assert.match(en, /not\\*\\* server-confirmed|not server-confirmed/i, "Counters do not overstate deletion success");
 console.log("PASS: public README screenshot, discoverability and documentation checks");
