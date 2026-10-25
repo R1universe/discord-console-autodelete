@@ -1,6 +1,21 @@
-# Discord AutoDelete v3.11
+# Discord AutoDelete v3.12
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.12 — transparent Apple × Discord glass
+
+The floating panel now follows the two user-selected **glass interface mockups**: cool blue-violet in the disabled state and softly luminous emerald while enabled. It has real `backdrop-filter: blur(28px) saturate(165%)`, translucent layered backgrounds, specular hairline borders, soft ambient reflections, rounded glass controls, and a restrained active-state glow. The effect depends on the browser and the page behind the floating panel.
+
+- The three statistics (**Queued**, **Requests**, **Errors**) remain **icon-free**: large centered number with its label beneath, no graphic glyphs in the counters.
+- **Custom deletion delay now supports 1–86,400 seconds (1s–24h)** for each of DMs and Servers. Each delay row still has three equal-width controls: **editable seconds / 4s / 60s**. Previous saved delays migrate unchanged.
+- One-second timing refers to **scheduling the delete attempt one second after a confirmed message is observed**. Browser timer throttling, slow message confirmation, rate limits and network conditions mean actual deletion is not guaranteed to occur within one second.
+- The existing module resolution, provisional-message filtering, scope selection, disabled-by-default state, and queue-cancellation behavior are retained.
+- **Requests** counts attempted calls, **not server-confirmed deletions**. **Errors** only counts captured exceptions; background 404/429 responses may be missed. See [Issue #2](./issues/2).
+- The original script remains an unsupported Discord self-bot, which Discord forbids and may sanction.
+
+Tests now validate the translucent style markers, icon-free metrics and both 1000ms server/DM schedules using mocked clients. **The v3.12 appearance and real-world timing still need validation in the user's browser.**
+
+See the [v3.12 visual specification](./design/UX_SPEC_v3.12.md).
 
 ## What's new in v3.11 — symmetrical delay rows
 
