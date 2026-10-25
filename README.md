@@ -15,6 +15,11 @@ An experimental **English-first, in-page control panel** for deleting your own n
 See the [full October 2026 audit (Russian)](./research/AUDIT_2026-10-25_RU.md). The previous audit guided the proxy-filter regression test; if v3.3 still fails, share its filtered-proxy count and module diagnostics without credentials.
 
 
+## QA and field testing
+
+- [Manual QA checklist (v3.3)](./QA_TEST_PLAN.md) — staged checks for delays, multiple messages, pause, DM/server scope, switching channels, and restart behavior.
+- One live successful deletion was reported by a user; broader correctness and reliability have **not** been verified.
+
 ## Features
 
 - Floating, draggable dashboard in English, with status, queue, activity log and controls.
