@@ -344,8 +344,8 @@ function createEnvironment(options = {}) {
     "Module-discovery errors remain visible outside disclosure");
   assert.match(source, /id="ad-limited"/,
     "Cache-only monitoring limitations must remain visible");
-  assert.equal(e.ids.get("ad-diagnostics"), undefined,
-    "Mock DOM should not pre-create a details element before first access");
+  assert.equal(e.ids.get("ad-diagnostics").open, true,
+    "Diagnostics remain available after opening a fully minimized overlay");
   api.openDiagnostics();
   const diag = e.ids.get("ad-diagnostics");
   assert.equal(diag.open, true, "Console command still reveals diagnostics");
