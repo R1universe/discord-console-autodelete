@@ -41,3 +41,15 @@ This is a focused, source-code-oriented sample of relevant GitHub projects, **no
 - [OAuth2 and bot users](https://github.com/discord/discord-api-docs/blob/main/developers/topics/oauth2.mdx) — bots cannot join ordinary group DMs.
 
 **Caution:** Repository claims about defeating logging, avoiding detection, or guaranteed account safety should not be treated as independently verified facts.
+
+
+## More directly relevant implementations (October 2026)
+
+Two independently found client-plugin implementations closely match the requested feature:
+
+- [o9ll/Guncord: timeDelete](https://github.com/o9ll/Guncord/blob/main/src/guncordplugins/timeDelete/index.tsx): subscribes to `MESSAGE_CREATE`, ignores optimistic messages and other authors, and uses a configurable timer before `MessageActions.deleteMessage(channelId, messageId)`. It uses the mod framework's lazy lookup `findByPropsLazy("deleteMessage")`, rather than guessing through a raw console's already-loaded modules.
+- [caedesdev/moggcord: SelfDestruct](https://github.com/caedesdev/moggcord/blob/main/src/moggcordplugins/selfDestruct/index.tsx): adds a chat-bar toggle and a visible countdown to the user's own messages; obtains `MessageActions` through `findByPropsLazy("deleteMessage", "startEditMessage")` and subscribes through the plugin's `flux.MESSAGE_CREATE` hook.
+
+**Root-cause improvement in v3.1:** Equicord's [REST module lookup](https://github.com/Combatmaster331/Equicord/blob/main/src/webpack/common/utils.ts) first looks up `getAPIBaseURL`, then uses `mod.HTTP ?? mod`. Version 3.0 did not descend into the nested `HTTP` property. It also failed the entire discovery if it found more than one otherwise plausible candidate, and required every necessary module to be in the same Webpack runtime. Version 3.1 addresses both assumptions and reports candidate counts instead of misleading booleans.
+
+Even so, an installed client mod can resolve lazy modules via its own loader and patch APIs, which a one-time console script may not replicate reliably. **Live Discord compatibility still requires testing.**
