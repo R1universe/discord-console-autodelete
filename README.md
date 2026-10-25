@@ -1,12 +1,26 @@
-# Discord AutoDelete v3.8
+# Discord AutoDelete v3.9
 
 Experimental **English-first browser-console dashboard** for deleting your own new Discord messages after a delay. **Unofficial self-bot automation violates Discord's rules** and can put your account at risk. Do not run unreviewed scripts or provide your Discord user token.
+
+## What's new in v3.9 — choose where, then choose when
+
+The compact UI now places controls in this order: **Enable / Disable → Where to delete → relevant delay settings → Queued / Attempts / Caught**.
+
+- Primary button labels are simply **Enable** and **Disable**. Disable still **cancels all pending timers**, as in earlier versions; the active button has a tooltip clarifying that behavior.
+- The `Where to delete` segmented control sits directly below the primary button.
+- **Everywhere** shows both delay settings (DMs first, Servers second).
+- **DMs** shows only the **DMs · deletion delay** field; **Servers** shows only **Servers · deletion delay**.
+- Switching scope does not reset hidden delay values. They are preserved in local settings and reappear unchanged when needed.
+- Scope changes affect **future messages only**; existing queued jobs keep their original deadlines. Disable cancels them.
+- Green/black theme, diagnostics, valid manual time entry and the core scheduling/deletion implementation remain unchanged.
+
+Mock-based tests cover the visual order, all scope/field combinations, independent hidden settings and button labels. **This update has not yet been visually tested on the user's live Discord client.** Using a normal account for this automation remains prohibited by Discord.
 
 ## What's new in v3.8 — black + green interactive redesign
 
 The main panel is now **near-black while paused** and softly **green-accented when auto-delete is active**. It uses a neutral graphite palette (base `#101113`, enabled background `#101714`, enabled border `#2e7d57`) instead of the older blue-charcoal scheme.
 
-- **Enable auto-delete / Pause · clear queue** is the first control directly below the header. The button clearly communicates whether deletion is on; enabling changes the accent, border and glow across the entire panel.
+- **Enable / Disable** is the first control directly below the header. The button clearly communicates whether deletion is on; enabling changes the accent, border and glow across the entire panel.
 - The old **ACTIVE / PAUSED · LOCAL** header row is removed. Version remains next to the title, and errors continue to appear as visible alerts.
 - **Where to delete** now uses three side-by-side **Everywhere / Servers / DMs** buttons instead of a browser-native dropdown. The selected button uses `aria-pressed` and the accent switches from subdued blue (off) to green (on).
 - The redundant **Queue empty / Next deletion** line is gone. `Queued`, `Attempts`, and `Caught` remain in the compact statistics row.
