@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.5.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.6.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -255,6 +255,29 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
+  // v3.6: keep risk information accessible, not dominant in compact UI.
+  assert.match(source, /AutoDelete <span class="version">v3\.6<\/span>/);
+  assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
+    "Safety and activity live in a native collapsed disclosure");
+  assert.match(source, /<summary>Diagnostics &amp; safety<\/summary>/,
+    "Disclosure label makes risk discoverable");
+  assert.match(source, /Unofficial account automation/,
+    "Self-bot risk must not disappear");
+  assert.doesNotMatch(source, /<p class="desc">/,
+    "Long explanatory paragraphs removed from main panel");
+  assert.doesNotMatch(source, /<div class="hint" style="text-align:center;margin-top:6px/,
+    "Technical metrics note removed from compact panel");
+  assert.match(source, /id="ad-error" role="alert"/,
+    "Module-discovery errors remain visible outside disclosure");
+  assert.match(source, /id="ad-limited"/,
+    "Cache-only monitoring limitations must remain visible");
+  const diag = e.ids.get("ad-diagnostics");
+  assert.equal(diag?.open, undefined, "Diagnostics start collapsed");
+  e.ids.get("ad-help").dispatch("click");
+  assert.equal(diag.open, true, "Help button reveals safety and diagnostics");
+  diag.open = false;
+  api.openDiagnostics();
+  assert.equal(diag.open, true, "Console command reveals diagnostics");
   assert.equal(api.connected, true, "Find real runtime and named exports");
   assert.equal(api.running, false, "Never start deletion automatically");
   assert.ok(e.ids.get("ad-warning"), "Dashboard renders");
@@ -536,7 +559,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: independent server/DM delays, persistence, migration, confirmed nonce lifecycle, REST, scopes and UI");
+  console.log("PASS: v3.6 compact UI/safety disclosure + server/DM delays, persistence, nonce lifecycle, REST, scopes");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
