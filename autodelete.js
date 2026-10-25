@@ -1,214 +1,443 @@
 /*
- * Discord AutoDelete — console prototype (2026-10)
- * Automatically deletes YOUR NEW Discord messages after a delay.
- * This is an unsupported Discord client modification / self-bot.
- * It violates Discord rules and could lead to account termination.
- *
- * SECURITY:
- * - no token retrieval or credential access
- * - no external network requests, eval, or remotely loaded code
- * - never logs or stores message text
- * - requires Discord's undocumented internal modules
- *
- * USAGE: review this entire file before pasting into Discord's browser console.
- * Once started, call DiscordAutoDelete.status(), .setDelay(30), .stop().
+ * Discord AutoDelete v2 — interactive console experiment
+ * This is NOT a supported Discord API integration. Self-bots can result in bans.
+ * No token extraction, credential access, external code or network requests.
+ * Does not read, log or store the contents of messages.
  */
 (() => {
   "use strict";
 
   const NAME = "DiscordAutoDelete";
-  const DEFAULT_SECONDS = 10; // Change this to your preferred number of seconds.
-  const MIN_SECONDS = 2;
-  const MAX_SECONDS = 24 * 60 * 60;
+  const HOST_ID = "discord-autodelete-v2";
+  const SETTINGS_KEY = "discord-autodelete-ui-v2";
+  const VERSION = "2.0.0";
+  const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
+  const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 2 && Number(value) <= 86400;
+  const scopes = new Set(["all", "servers", "dm"]);
 
-  if (window[NAME]?.running) {
-    console.warn(`[${NAME}] Already running; call ${NAME}.status() or ${NAME}.stop().`);
+  if (window[NAME]?.open) {
+    window[NAME].open();
+    console.info("[AutoDelete] Already installed in this tab. Reopened the panel.");
     return;
   }
-  if (!(location.hostname === "discord.com" || location.hostname.endsWith(".discord.com"))) {
-    console.error(`[${NAME}] Run only on https://discord.com/app`);
-    return;
-  }
-
-  // Read the already loaded application's module cache. Does NOT access a token.
-  const chunks = window.webpackChunkdiscord_app;
-  if (!chunks || typeof chunks.push !== "function") {
-    console.error(`[${NAME}] Discord webpack runtime not found. Client may have changed.`);
+  if (location.hostname !== "discord.com" && !location.hostname.endsWith(".discord.com")) {
+    console.error("[AutoDelete] Open https://discord.com/app first.");
     return;
   }
 
-  let webpackRequire;
-  const tempId = `console-autodelete-${Date.now()}`;
-  try {
-    chunks.push([[tempId], {}, (req) => { webpackRequire = req; }]);
-    // Discord's webpack runtime usually keeps a chunk list. Do not pop unless
-    // the marker we just added is still the last entry.
-    if (chunks.at(-1)?.[0]?.[0] === tempId) chunks.pop();
-  } catch (error) {
-    console.error(`[${NAME}] Cannot inspect client modules:`, error);
-    return;
-  }
-  if (!webpackRequire?.c) {
-    console.error(`[${NAME}] Module cache inaccessible. Nothing was installed.`);
-    return;
-  }
-
-  const modules = []
-  const alreadySeen = new Set();
-  const addModule = (value) => {
-    if (value && (typeof value === "object" || typeof value === "function") && !alreadySeen.has(value)) {
-      alreadySeen.add(value);
-      modules.push(value);
-    }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; } catch {}
+  const config = {
+    delay: validDelay(saved.delay) ? Number(saved.delay) : 10,
+    scope: scopes.has(saved.scope) ? saved.scope : "all"
   };
-  for (const item of Object.values(webpackRequire.c)) {
-    const exported = item?.exports;
-    if (!exported) continue;
-    addModule(exported);
-    if (exported.default) addModule(exported.default);
+  const state = {
+    ready: false, enabled: false, error: "", pending: new Map(),
+    requests: 0, failed: 0, skipped: 0, detected: 0,
+    accountId: null, connected: null, recent: [], destroyed: false
+  };
+  let ticker = null;
+  let hooks = null;
+
+  function save() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(config)); } catch {}
   }
 
-  // Fail closed on ambiguity: never guess which action to call.
-  function findUnique(predicate, what, preference = () => false) {
-    const matches = modules.filter((candidate) => {
-      try { return predicate(candidate); } catch { return false; }
-    });
-    const preferred = matches.filter(preference);
-    const selected = preferred.length === 1 ? preferred : (matches.length === 1 ? matches : []);
-    if (selected.length !== 1) {
-      throw new Error(`${what}: found ${matches.length} candidates; refusing to guess.`);
+  // A Shadow DOM keeps the controls isolated from Discord's CSS.
+  const host = document.createElement("div");
+  host.id = HOST_ID;
+  host.style.cssText = "position:fixed;z-index:2147483000;right:24px;top:86px;";
+  document.body.appendChild(host);
+  const shadow = host.attachShadow({ mode: "open" });
+  const style = document.createElement("style");
+  style.textContent = [
+    ":host{all:initial;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#edf0fa;font-size:13px}",
+    "*{box-sizing:border-box}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.38;cursor:not-allowed}",
+    ".panel{width:370px;max-width:calc(100vw - 30px);background:#11141e;border:1px solid #333b54;border-radius:18px;box-shadow:0 18px 58px #000b,0 2px 8px #0008;overflow:hidden}",
+    ".head{padding:18px 18px 13px;background:linear-gradient(130deg,#202644,#171a29 70%);cursor:grab;touch-action:none;user-select:none}",
+    ".top{display:flex;align-items:center;justify-content:space-between;gap:10px}",
+    ".brand{display:flex;align-items:center;gap:10px}.brand-icon{display:grid;place-items:center;width:35px;height:35px;border-radius:11px;background:#7778ef22;border:1px solid #888aff55;color:#b6b3ff;font-size:20px}",
+    "h1{font-size:15px;line-height:1.2;margin:0;font-weight:720;letter-spacing:-.2px}.muted{color:#9ba4c0;font-size:11px}.version{color:#9298b8;font-size:10px;font-weight:600}",
+    ".head-buttons{display:flex;gap:6px}.mini{min-width:26px;height:27px;padding:0 7px;border:1px solid #4b5370;border-radius:8px;color:#abb2d3;background:#ffffff08}",
+    ".mini:hover{background:#ffffff14}.state{display:flex;align-items:center;justify-content:space-between;margin-top:15px}",
+    ".status{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:#aeb8d5;font-weight:700;letter-spacing:.45px}",
+    ".dot{height:8px;width:8px;border-radius:50%;background:#777e96}.dot.active{background:#49d6a4;box-shadow:0 0 0 4px #49d6a422}.dot.error{background:#ff9a88}.dot.paused{background:#efbf68}",
+    ".body{padding:16px 18px}.desc{color:#a1abc6;font-size:12px;line-height:1.55;margin:0 0 15px}",
+    ".warning{border:1px solid #705b35;border-radius:9px;background:#f8bf4811;padding:9px 11px;color:#dec28b;font-size:11px;line-height:1.45;margin-bottom:15px}",
+    ".warning.error{border-color:#894e60;background:#ff627e13;color:#ffb7c2}",
+    ".field{margin-bottom:15px}.fieldrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}",
+    "label{font-weight:650;font-size:12px;color:#d5d9ef}.hint{font-size:10px;color:#8c97b3}",
+    ".delay{display:flex;gap:8px;align-items:center}.value{width:85px;padding:9px 10px;border:1px solid #3b4562;background:#202638;color:#f1f2ff;border-radius:9px;outline:none}",
+    ".value:focus,select:focus{border-color:#8f91ff;box-shadow:0 0 0 2px #8f91ff22}",
+    ".presets{display:flex;flex:1;gap:5px}.preset{flex:1;border:1px solid #3a445e;background:#222838;color:#aeb6d1;border-radius:8px;padding:9px 0;font-size:11px}",
+    ".preset.selected{color:#dddfff;border-color:#8686fa;background:#8c8aff22}",
+    "select{display:block;width:100%;appearance:auto;padding:10px;background:#202638;color:#ebedfc;border:1px solid #3b4562;border-radius:9px}",
+    ".primary{width:100%;border:0;padding:11px 12px;border-radius:10px;background:#8c8bfa;color:#111325;font-weight:750;font-size:12px}",
+    ".primary:hover:not(:disabled){background:#a4a4ff}.primary.stop{background:#2b344c;color:#e6e9fa;border:1px solid #515d7b}",
+    ".reconnect{margin-top:8px;width:100%;border:1px solid #4c5778;background:transparent;padding:9px;border-radius:9px;color:#c6cdf7}",
+    ".statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:15px}",
+    ".stat{border:1px solid #333b52;background:#1b2030;padding:10px 7px;border-radius:10px;text-align:center}",
+    ".stat strong{display:block;font-size:18px;line-height:1.3;letter-spacing:-.5px;color:#f4f4ff}",
+    ".stat span{font-size:10px;color:#929cb8}.next{font-size:11px;color:#9ca5bc;margin:10px 0 0;text-align:center}",
+    ".logs{margin-top:14px;padding-top:13px;border-top:1px solid #2f3549}.logshead{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;color:#b9c3dd;margin-bottom:8px}",
+    ".loglist{max-height:125px;overflow:auto;scrollbar-width:thin;color:#a5aec8;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
+    ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#65708e;margin-right:5px}.logitem.bad{color:#ffa2b5}.logitem.good{color:#82e0bd}",
+    ".footer{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid #293047;background:#151a27}",
+    ".footer span{color:#8893b0;font-size:10px}.footer button{border:0;background:none;color:#abb5dc;font-size:11px}",
+    ".pill{display:none;align-items:center;gap:10px;background:#171c2a;border:1px solid #5b6485;color:#ecefff;border-radius:99px;padding:10px 14px;box-shadow:0 8px 30px #0008;font-weight:650}",
+    ".collapsed .panel{display:none}.collapsed .pill{display:flex}",
+    "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:12px}.head{padding:14px}}"
+  ].join("\n");
+  shadow.appendChild(style);
+
+  const root = document.createElement("div");
+  root.innerHTML = [
+    '<section class="panel" role="region" aria-label="Discord AutoDelete controls">',
+      '<div class="head" id="ad-head">',
+        '<div class="top">',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v2</span></h1><div class="muted">Временные сообщения Discord</div></div></div>',
+          '<div class="head-buttons"><button class="mini" id="ad-min" title="Свернуть" aria-label="Свернуть">−</button><button class="mini" id="ad-close" title="Остановить и закрыть" aria-label="Закрыть">×</button></div>',
+        '</div>',
+        '<div class="state"><span class="status"><i class="dot" id="ad-dot"></i><span id="ad-state">ПОДКЛЮЧЕНИЕ</span></span><span class="version">LOCAL · v', VERSION, '</span></div>',
+      '</div>',
+      '<div class="body">',
+        '<p class="desc">Автоматически удаляет только твои новые сообщения. Сначала выбери настройки и включи функцию.</p>',
+        '<div class="warning" id="ad-warning">Неофициальная автоматизация аккаунта: Discord может ограничить или заблокировать аккаунт.</div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-delay">Задержка удаления</label><span class="hint">2–86400 сек.</span></div>',
+          '<div class="delay"><input class="value" id="ad-delay" type="number" min="2" max="86400" step="1" aria-label="Задержка в секундах"><div class="presets">',
+          '<button class="preset" data-delay="5">5s</button><button class="preset" data-delay="10">10s</button><button class="preset" data-delay="30">30s</button><button class="preset" data-delay="60">60s</button>',
+        '</div></div></div>',
+        '<div class="field"><div class="fieldrow"><label for="ad-scope">Где удалять</label><span class="hint">Только мои сообщения</span></div>',
+          '<select id="ad-scope"><option value="all">Везде: серверы и DM</option><option value="servers">Только серверы</option><option value="dm">Только DM и групповые DM</option></select></div>',
+        '<button class="primary" id="ad-toggle" disabled>Проверка подключения…</button>',
+        '<button class="reconnect" id="ad-retry" style="display:none">Повторить подключение</button>',
+        '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>В очереди</span></div>',
+        '<div class="stat"><strong id="ad-requests">0</strong><span>Запросов</span></div>',
+        '<div class="stat"><strong id="ad-failed">0</strong><span>Ошибок</span></div></div>',
+        '<div class="next" id="ad-next">Нет запланированных удалений</div>',
+        '<div class="logs"><div class="logshead">ЖУРНАЛ <span class="hint">Без текста сообщений</span></div><div class="loglist" id="ad-logs" aria-live="polite"></div></div>',
+      '</div>',
+      '<div class="footer"><span>Настройки сохраняются локально</span><button id="ad-retry-foot">Диагностика ↻</button></div>',
+    '</section>',
+    '<button id="ad-pill" class="pill" type="button" aria-label="Открыть AutoDelete"><span>◷</span><span id="ad-pill-text">AutoDelete · Выкл.</span></button>'
+  ].join("");
+  shadow.appendChild(root);
+  const el = id => shadow.getElementById(id);
+
+  function notify(message, tone = "") {
+    const entry = { time: new Date().toLocaleTimeString(), message, tone };
+    state.recent.unshift(entry);
+    if (state.recent.length > 18) state.recent.length = 18;
+    const list = el("ad-logs");
+    if (list) {
+      list.replaceChildren();
+      state.recent.slice(0, 6).forEach(item => {
+        const line = document.createElement("div");
+        line.className = "logitem " + item.tone;
+        const date = document.createElement("span");
+        date.className = "time";
+        date.textContent = item.time;
+        const msg = document.createElement("span");
+        msg.textContent = item.message;
+        line.append(date, msg);
+        list.appendChild(line);
+      });
     }
-    return selected[0];
+    if (tone === "bad") console.warn("[AutoDelete] " + message);
+    else console.info("[AutoDelete] " + message);
   }
 
-  let dispatcher;
-  let userStore;
-  let messageActions;
-  try {
-    dispatcher = findUnique(
-      (x) => typeof x?.subscribe === "function" && typeof x?.unsubscribe === "function" && typeof x?.dispatch === "function",
-      "FluxDispatcher",
-      (x) => x?._actionHandlers != null
+  function render() {
+    if (state.destroyed) return;
+    const mode = state.error ? "ERROR" : !state.ready ? "ПОДКЛЮЧЕНИЕ" : state.enabled ? "АКТИВЕН" : "ПАУЗА";
+    el("ad-state").textContent = mode;
+    el("ad-dot").className = "dot " + (state.error ? "error" : state.enabled ? "active" : "paused");
+    el("ad-warning").className = "warning" + (state.error ? " error" : "");
+    el("ad-warning").textContent = state.error ?
+      "Подключение не удалось: " + state.error : "Self-bot нарушает правила Discord. Удаление не гарантировано; сообщения могут сохраниться у других.";
+    el("ad-toggle").disabled = !state.ready;
+    el("ad-toggle").textContent = state.enabled ? "Пауза · отменить очередь" : "Включить автоудаление";
+    el("ad-toggle").className = "primary" + (state.enabled ? " stop" : "");
+    el("ad-retry").style.display = state.ready ? "none" : "block";
+    el("ad-delay").value = config.delay;
+    el("ad-scope").value = config.scope;
+    shadow.querySelectorAll("[data-delay]").forEach(btn =>
+      btn.classList.toggle("selected", Number(btn.dataset.delay) === config.delay)
     );
-    userStore = findUnique(
-      (x) => typeof x?.getCurrentUser === "function" && typeof x?.getUser === "function",
-      "UserStore",
-      (x) => typeof x?.initialize === "function"
-    );
-    messageActions = findUnique(
-      (x) => typeof x?.deleteMessage === "function",
-      "MessageActions",
-      (x) => typeof x?.startEditMessage === "function" || typeof x?.editMessage === "function"
-    );
-  } catch (error) {
-    console.error(`[${NAME}] Unsupported Discord build:`, error.message);
-    return;
+    el("ad-pending").textContent = state.pending.size;
+    el("ad-requests").textContent = state.requests;
+    el("ad-failed").textContent = state.failed;
+    const jobs = [...state.pending.values()];
+    const next = jobs.length ? Math.min(...jobs.map(job => job.deadline)) : 0;
+    el("ad-next").textContent = next ?
+      "Следующее удаление через " + Math.max(0, Math.ceil((next - Date.now()) / 1000)) + " сек." :
+      "Нет запланированных удалений";
+    el("ad-pill-text").textContent = "AutoDelete · " + (state.enabled ? "Активен" : state.error ? "Ошибка" : "Пауза");
   }
 
-  const accountId = String(userStore.getCurrentUser()?.id ?? "");
-  if (!/^\d{15,22}$/.test(accountId)) {
-    console.error(`[${NAME}] Could not determine current account. Not starting.`);
-    return;
-  }
-
-  let delaySeconds = DEFAULT_SECONDS;
-  let running = true;
-  let deleted = 0;
-  let failed = 0;
-  let skipped = 0;
-  const pending = new Map(); // IDs and timers only; no message contents.
-  const validId = (value) => /^\d{15,22}$/.test(String(value ?? ""));
-
-  function cancel(messageId) {
-    const key = String(messageId);
-    const job = pending.get(key);
+  function cancel(id) {
+    const key = String(id ?? "");
+    const job = state.pending.get(key);
     if (!job) return;
     clearTimeout(job.timer);
-    pending.delete(key);
+    state.pending.delete(key);
+    render();
+  }
+  function clearPending() {
+    for (const job of state.pending.values()) clearTimeout(job.timer);
+    state.pending.clear();
+    render();
   }
 
-  function onMessageCreate(event) {
-    if (!running) return;
-    const msg = event?.message;
-    if (!msg || String(msg.author?.id ?? "") !== accountId) return;
-    const messageId = String(msg.id ?? "");
-    const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
-    if (!validId(messageId) || !validId(channelId) || pending.has(messageId)) return;
+  function addCandidates(cache) {
+    const found = [], seen = new Set();
+    const put = value => {
+      if (!value || (typeof value !== "object" && typeof value !== "function") || seen.has(value)) return;
+      seen.add(value);
+      found.push(value);
+    };
+    for (const entry of Object.values(cache)) {
+      try {
+        const exported = entry?.exports;
+        put(exported);
+        if (!exported) continue;
+        for (const key of Object.keys(exported)) {
+          try { put(exported[key]); } catch {}
+        }
+      } catch {}
+    }
+    return found;
+  }
+  function choose(candidates, predicate, displayName, preference) {
+    const matches = candidates.filter(item => {
+      try { return predicate(item); } catch { return false; }
+    });
+    const preferred = matches.filter(item => {
+      try { return preference?.(item); } catch { return false; }
+    });
+    const options = preferred.length === 1 ? preferred : matches.length === 1 ? matches : [];
+    if (options.length !== 1) throw new Error(displayName + ": " + matches.length + " вариантов; безопасный выбор невозможен");
+    return options[0];
+  }
+  const storeNamed = name => obj => {
+    try { return Object.getPrototypeOf(obj)?.constructor?.displayName === name || obj?.constructor?.displayName === name; }
+    catch { return false; }
+  };
 
-    const expiresAt = Date.now() + delaySeconds * 1000;
+  function discover() {
+    const chunk = window.webpackChunkdiscord_app;
+    if (!chunk || typeof chunk.push !== "function") throw new Error("Webpack Discord не найден");
+    const runtimes = [];
+    const marker = Symbol("DiscordAutoDelete");
+    try {
+      chunk.push([[marker], {}, req => {
+        if (req?.c && !runtimes.includes(req)) runtimes.push(req);
+      }]);
+      if (chunk.at(-1)?.[0]?.[0] === marker) chunk.pop();
+    } catch (err) {
+      throw new Error("Webpack недоступен: " + String(err?.message ?? err));
+    }
+    runtimes.sort((a,b) => Object.keys(b.c).length - Object.keys(a.c).length);
+    if (!runtimes.length) throw new Error("Кэш модулей пуст");
+
+    let lastError = "Неизвестная ошибка";
+    for (const req of runtimes) {
+      try {
+        const items = addCandidates(req.c);
+        const dispatcher = choose(items, item =>
+          typeof item.subscribe === "function" &&
+          typeof item.unsubscribe === "function" &&
+          typeof item.dispatch === "function" &&
+          (item._subscriptions != null || item._actionHandlers != null || typeof item.flushWaitQueue === "function"),
+          "FluxDispatcher",
+          item => item._subscriptions != null && typeof item.flushWaitQueue === "function"
+        );
+        const users = choose(items, item =>
+          typeof item.getCurrentUser === "function" && typeof item.getUser === "function",
+          "UserStore", storeNamed("UserStore")
+        );
+        const actions = choose(items, item =>
+          typeof item.deleteMessage === "function",
+          "MessageActions",
+          item => typeof item.startEditMessage === "function" || typeof item.editMessage === "function"
+        );
+        const channels = items.filter(item => {
+          try { return typeof item.getChannel === "function" && storeNamed("ChannelStore")(item); } catch { return false; }
+        });
+        const channelStore = channels.length === 1 ? channels[0] : null;
+        const accountId = String(users.getCurrentUser()?.id ?? "");
+        if (!validId(accountId)) throw new Error("Невозможно определить текущего пользователя");
+        return { dispatcher, users, actions, channelStore, accountId, moduleCount: items.length };
+      } catch (err) { lastError = String(err?.message ?? err); }
+    }
+    throw new Error(lastError);
+  }
+
+  function scopeMatches(msg, channelId) {
+    if (config.scope === "all") return true;
+    const channel = hooks.channelStore?.getChannel(channelId);
+    const type = channel?.type;
+    const direct = type === 1 || type === 3;
+    const guild = Boolean(msg.guild_id ?? msg.guildId ?? channel?.guild_id ?? channel?.guildId);
+    if (config.scope === "dm") return direct;
+    return guild && !direct;
+  }
+  function onCreate(event) {
+    if (!state.enabled || !hooks || state.destroyed) return;
+    const msg = event?.message;
+    if (!msg || String(msg.author?.id ?? "") !== state.accountId) return;
+    const id = String(msg.id ?? "");
+    const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
+    if (!validId(id) || !validId(channelId) || state.pending.has(id)) return;
+    if (!scopeMatches(msg, channelId)) { state.skipped++; return; }
+    state.detected++;
+    const deadline = Date.now() + config.delay * 1000;
     const timer = setTimeout(async () => {
-      pending.delete(messageId);
-      if (!running) return;
-      // A browser tab can be re-used after switching accounts: do not act in
-      // a different logged-in account's session.
-      if (String(userStore.getCurrentUser()?.id ?? "") !== accountId) {
-        skipped += 1;
-        console.warn(`[${NAME}] Account changed: skipped message ${messageId}.`);
+      state.pending.delete(id);
+      render();
+      if (state.destroyed || !state.enabled) return;
+      if (String(hooks.users.getCurrentUser()?.id ?? "") !== state.accountId) {
+        state.skipped++;
+        notify("Аккаунт изменился: удаление пропущено", "bad");
+        render();
         return;
       }
       try {
-        await Promise.resolve(messageActions.deleteMessage(channelId, messageId));
-        deleted += 1;
-        console.info(`[${NAME}] Delete requested for message ${messageId}.`);
-      } catch (error) {
-        failed += 1;
-        console.error(`[${NAME}] Delete failed for message ${messageId}:`, error);
+        await Promise.resolve(hooks.actions.deleteMessage(channelId, id));
+        state.requests++;
+        notify("Запрос удаления отправлен", "good");
+      } catch (err) {
+        state.failed++;
+        notify("Ошибка удаления: " + String(err?.message ?? err).slice(0, 140), "bad");
       }
-    }, delaySeconds * 1000);
-    pending.set(messageId, { timer, channelId, expiresAt });
-    console.info(`[${NAME}] Scheduled ${messageId} for deletion in ${delaySeconds}s.`);
+      render();
+    }, config.delay * 1000);
+    state.pending.set(id, { timer, deadline });
+    notify("Новое сообщение: удаление через " + config.delay + " сек.");
+    render();
+  }
+  function onDelete(event) { cancel(event?.id ?? event?.messageId ?? event?.message?.id); }
+
+  function disconnect() {
+    if (hooks) {
+      try { hooks.dispatcher.unsubscribe("MESSAGE_CREATE", onCreate); } catch {}
+      try { hooks.dispatcher.unsubscribe("MESSAGE_DELETE", onDelete); } catch {}
+    }
+    hooks = null;
+    state.ready = false;
+    state.enabled = false;
+    clearPending();
+  }
+  function connect() {
+    disconnect();
+    state.error = "";
+    try {
+      const discovered = discover();
+      hooks = discovered;
+      state.accountId = discovered.accountId;
+      discovered.dispatcher.subscribe("MESSAGE_CREATE", onCreate);
+      discovered.dispatcher.subscribe("MESSAGE_DELETE", onDelete);
+      state.ready = true;
+      state.enabled = false; // Explicit opt-in on every injection / reconnect
+      notify("Модули найдены (" + discovered.moduleCount + "). Нажми «Включить».", "good");
+    } catch (err) {
+      disconnect();
+      state.error = String(err?.message ?? err);
+      notify("Ошибка модулей: " + state.error, "bad");
+    }
+    render();
+    return state.ready;
+  }
+  function pause() { state.enabled = false; clearPending(); notify("Пауза: все ожидающие таймеры отменены"); render(); }
+  function resume() {
+    if (!state.ready || !hooks) return false;
+    if (String(hooks.users.getCurrentUser()?.id ?? "") !== state.accountId) {
+      state.error = "Аккаунт изменился, переподключись";
+      pause();
+      render();
+      return false;
+    }
+    state.enabled = true;
+    notify("Автоудаление включено", "good");
+    render();
+    return true;
+  }
+  function setDelay(value) {
+    if (!validDelay(value)) throw new RangeError("Задержка: целое число 2–86400 сек.");
+    config.delay = Number(value);
+    save();
+    render();
+    notify("Новая задержка: " + config.delay + " сек. (для новых сообщений)");
+    return config.delay;
+  }
+  function setScope(value) {
+    if (!scopes.has(value)) throw new RangeError("scope: all | servers | dm");
+    config.scope = value;
+    save();
+    render();
+    notify("Область удаления: " + value + " (для новых сообщений)");
+    return value;
   }
 
-  function onMessageDelete(event) {
-    cancel(event?.id ?? event?.messageId ?? event?.message?.id);
-  }
+  el("ad-toggle").addEventListener("click", () => state.enabled ? pause() : resume());
+  el("ad-retry").addEventListener("click", connect);
+  el("ad-retry-foot").addEventListener("click", connect);
+  el("ad-delay").addEventListener("change", event => {
+    try { setDelay(Number(event.target.value)); }
+    catch (err) { notify(err.message, "bad"); render(); }
+  });
+  shadow.querySelectorAll("[data-delay]").forEach(btn => btn.addEventListener("click", () => setDelay(Number(btn.dataset.delay))));
+  el("ad-scope").addEventListener("change", event => setScope(event.target.value));
+  el("ad-min").addEventListener("click", () => root.classList.add("collapsed"));
+  el("ad-pill").addEventListener("click", () => root.classList.remove("collapsed"));
 
-  try {
-    dispatcher.subscribe("MESSAGE_CREATE", onMessageCreate);
-    dispatcher.subscribe("MESSAGE_DELETE", onMessageDelete);
-  } catch (error) {
-    try { dispatcher.unsubscribe("MESSAGE_CREATE", onMessageCreate); } catch {}
-    console.error(`[${NAME}] Failed to subscribe. Not running:`, error);
-    return;
-  }
-
-  const controller = {
-    get running() { return running; },
-    status() {
-      const result = {
-        running,
-        delaySeconds,
-        pending: pending.size,
-        deleteRequests: deleted,
-        failed,
-        skipped,
-        accountId,
-      };
-      console.table(result);
-      return result;
-    },
-    setDelay(seconds) {
-      if (!Number.isInteger(seconds) || seconds < MIN_SECONDS || seconds > MAX_SECONDS) {
-        throw new RangeError(`Delay must be an integer from ${MIN_SECONDS} to ${MAX_SECONDS} seconds.`);
-      }
-      delaySeconds = seconds;
-      console.info(`[${NAME}] New messages will be deleted after ${seconds}s. Pending timers are unchanged.`);
-    },
-    stop() {
-      if (!running) return;
-      running = false;
-      dispatcher.unsubscribe("MESSAGE_CREATE", onMessageCreate);
-      dispatcher.unsubscribe("MESSAGE_DELETE", onMessageDelete);
-      for (const job of pending.values()) clearTimeout(job.timer);
-      pending.clear();
-      console.info(`[${NAME}] Stopped and cancelled pending timers.`);
-    },
+  // Optional drag handle: only the header moves the overlay.
+  let moving = null;
+  const onMove = event => {
+    if (!moving) return;
+    host.style.left = Math.max(6, Math.min(window.innerWidth - 44, event.clientX - moving.dx)) + "px";
+    host.style.top = Math.max(6, Math.min(window.innerHeight - 44, event.clientY - moving.dy)) + "px";
   };
+  const onUp = () => { moving = null; };
+  el("ad-head").addEventListener("pointerdown", event => {
+    if (event.target.closest("button")) return;
+    const rect = host.getBoundingClientRect();
+    moving = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+    host.style.right = "auto";
+  });
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
 
+  function stop() {
+    if (state.destroyed) return;
+    disconnect();
+    state.destroyed = true;
+    if (ticker) clearInterval(ticker);
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    host.remove();
+    try { delete window[NAME]; } catch { window[NAME] = undefined; }
+    console.info("[AutoDelete] Остановлено, панель удалена.");
+  }
+  el("ad-close").addEventListener("click", stop);
+  const controller = {
+    get running() { return state.ready && state.enabled && !state.destroyed; },
+    get connected() { return state.ready; },
+    open() { root.classList.remove("collapsed"); },
+    hide() { root.classList.add("collapsed"); },
+    status() {
+      const snapshot = {
+        ready: state.ready, enabled: state.enabled, error: state.error,
+        delaySeconds: config.delay, scope: config.scope, pending: state.pending.size,
+        requests: state.requests, failed: state.failed, skipped: state.skipped
+      };
+      console.table(snapshot);
+      return snapshot;
+    },
+    setDelay, setScope, pause, resume, retry: connect, stop
+  };
   Object.defineProperty(window, NAME, { value: controller, configurable: true });
-  console.warn(
-    `[${NAME}] EXPERIMENTAL. Running for YOUR NEW messages, ${delaySeconds}s delay. ` +
-    `This violates Discord's self-bot rules and may get your account banned. ` +
-    `To stop: ${NAME}.stop()`
-  );
+  ticker = setInterval(render, 1000);
+  render();
+  connect();
 })();
