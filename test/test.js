@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.6.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.7.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -19,6 +19,14 @@ function fakeElement() {
     addEventListener(name, fn) { events.set(name, fn); },
     removeEventListener(name) { events.delete(name); },
     dispatch(name, payload = {}) { events.get(name)?.(payload); },
+    focus() { this.dispatch("focus", { target: this }); },
+    blur() {
+      // Simplified Chrome behavior: change fires upon committing a text
+      // input, then blur. The shadow root's activeElement remains unavailable
+      // here to reproduce the previous half-second render overwrite bug.
+      this.dispatch("change", { target: this });
+      this.dispatch("blur", { target: this });
+    },
     append() {}, appendChild() {}, replaceChildren() {},
     getBoundingClientRect() { return { left: 0, top: 0 }; },
     remove() { this.removed = true; },
@@ -255,8 +263,8 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // v3.6: keep risk information accessible, not dominant in compact UI.
-  assert.match(source, /AutoDelete <span class="version">v3\.6<\/span>/);
+  // v3.7: DM-first compact UI keeps risk details accessible.
+  assert.match(source, /AutoDelete <span class="version">v3\.7<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics &amp; safety<\/summary>/,
@@ -315,6 +323,76 @@ function createEnvironment(options = {}) {
 
   api.stop();
   assert.equal(e.window.DiscordAutoDelete, undefined, "Stop clears controller");
+  // v3.7 — DM-first and manual custom entries must survive the 500ms UI
+  // refresh. The fake ShadowRoot deliberately has no activeElement, so a
+  // focus-only check would overwrite digits while they are being typed.
+  assert.ok(source.indexOf('<label for="ad-dm-delay">') <
+    source.indexOf('<label for="ad-server-delay">'),
+    "DM control is rendered above Servers control");
+  assert.match(source, /id="ad-dm-delay" type="text" inputmode="numeric"/);
+  assert.match(source, /id="ad-server-delay" type="text" inputmode="numeric"/);
+  const typing = createEnvironment();
+  vm.runInContext(source, typing.context, { timeout: 3000 });
+  const manual = typing.window.DiscordAutoDelete;
+  const dmInput = typing.ids.get("ad-dm-delay");
+  const serverInput = typing.ids.get("ad-server-delay");
+  assert.equal(dmInput.value, "10");
+  assert.equal(serverInput.value, "10");
+  dmInput.focus();
+  dmInput.value = "";
+  dmInput.dispatch("input", { target: dmInput });
+  typing.tick();
+  assert.equal(dmInput.value, "", "Empty intermediate edit is not overwritten by render");
+  dmInput.value = "1";
+  dmInput.dispatch("input", { target: dmInput });
+  typing.tick();
+  assert.equal(dmInput.value, "1", "Partial value may be below min while typing");
+  dmInput.value = "125";
+  dmInput.dispatch("input", { target: dmInput });
+  typing.tick();
+  assert.equal(dmInput.value, "125", "Completed entry survives periodic render");
+  assert.equal(manual.status().dmDelaySeconds, 10,
+    "Delay is not saved prematurely before Enter/blur");
+  let stopCalled = false;
+  dmInput.dispatch("keydown", {
+    key: "2",
+    stopPropagation() { stopCalled = true; }
+  });
+  assert.equal(stopCalled, true, "Typing is isolated from Discord global keyboard shortcuts");
+  dmInput.dispatch("keydown", {
+    key: "Enter",
+    stopPropagation() {}, preventDefault() {}
+  });
+  assert.equal(manual.status().dmDelaySeconds, 125, "Enter commits custom DM seconds");
+  assert.equal(manual.status().serverDelaySeconds, 10,
+    "Editing the DM field does not affect Servers");
+  serverInput.focus();
+  serverInput.value = "45";
+  serverInput.dispatch("input", { target: serverInput });
+  typing.tick();
+  assert.equal(serverInput.value, "45", "Server edit survives periodic rerenders");
+  serverInput.blur();
+  assert.equal(manual.status().serverDelaySeconds, 45,
+    "Clicking outside commits custom Server seconds");
+  dmInput.focus();
+  dmInput.value = "1";
+  dmInput.dispatch("input", { target: dmInput });
+  typing.tick();
+  assert.equal(dmInput.value, "1", "Invalid interim values remain editable until commit");
+  dmInput.blur();
+  assert.equal(dmInput.value, "125", "Invalid input restores previously saved value");
+  assert.equal(manual.status().dmDelaySeconds, 125);
+  dmInput.focus();
+  dmInput.value = "888";
+  dmInput.dispatch("input", { target: dmInput });
+  dmInput.dispatch("keydown", {
+    key: "Escape", stopPropagation() {}, preventDefault() {}
+  });
+  assert.equal(dmInput.value, "125", "Escape restores saved setting");
+  assert.equal(manual.status().dmDelaySeconds, 125, "Escape does not save the draft");
+  assert.equal(JSON.parse(typing.stored.get("discord-autodelete-ui-v2")).dmDelay, 125);
+  manual.stop();
+
   // Independent timing: separate server and DM values, no timer rewrites.
   const splitDelays = createEnvironment();
   vm.runInContext(source, splitDelays.context, { timeout: 3000 });
@@ -560,7 +638,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.6 compact UI/safety disclosure + server/DM delays, persistence, nonce lifecycle, REST, scopes");
+  console.log("PASS: v3.7 DM-first editable inputs, focus locks, keyboard isolation, server/DM timers and safety");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
