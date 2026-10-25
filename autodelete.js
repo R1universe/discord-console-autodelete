@@ -115,6 +115,7 @@
         '<div class="stat"><strong id="ad-requests">0</strong><span>Attempts</span></div>',
         '<div class="stat"><strong id="ad-failed">0</strong><span>Caught</span></div></div>',
         '<div class="next" id="ad-next">No scheduled deletions</div>',
+        '<div class="hint" style="text-align:center;margin-top:6px;line-height:1.4">Attempts ≠ confirmed deletions · Caught may miss background HTTP errors</div>',
         '<div class="logs"><div class="logshead">ACTIVITY LOG <span class="hint">No message content recorded</span></div><div class="loglist" id="ad-logs" aria-live="polite"></div></div>',
       '</div>',
       '<div class="footer"><span>Settings saved locally</span><button id="ad-retry-foot">Reconnect ↻</button></div>',
