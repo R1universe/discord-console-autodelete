@@ -12,7 +12,7 @@
   <img src="assets/autodelete-active.webp" alt="Previous AutoDelete v3.13 interface, before the v3.14 exclusion picker and Deleted counter" width="350">
 </p>
 
-<p align="center"><sub>Previous v3.13 interface · v3.14 adds exclusion pickers and live diagnostics countdowns</sub></p>
+<p align="center"><sub>Previous v3.13 interface · v3.15 adds exclusion pickers, live countdowns and a draggable compact status view</sub></p>
 
 > [!WARNING]
 > **Experimental, unofficial Discord self-bot automation.** Discord prohibits automating regular user accounts; using this script can result in account restrictions or termination. The tool does **not guarantee** that a message will disappear at the requested time, or that it was not read, copied, saved or logged beforehand. Not affiliated with Discord.
@@ -48,7 +48,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 - **No manual token entry or token scraping:** uses Discord's internal authenticated `RestAPI.del()` or `MessageActions.deleteMessage()` when discoverable.
 - **Countdown diagnostics:** see the time remaining before each pending deletion attempt without showing message text or identifiers.
 - **Honest counters:** **Queued / Deleted / Errors**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted.
-- **Hide without stopping:** the `−` button removes the panel from view while enabled monitoring continues. Restore with `DiscordAutoDelete.open()`.
+- **Draggable mini dashboard:** **Minimize (−)** shrinks the full overlay to a **250px compact status window** showing live **Queued / Deleted / Errors** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
 - **Local preferences:** delays, scope, and excluded DM/server IDs are remembered in the browser; **the script starts disabled on every fresh load**.
 
 ## Quick start — Discord Web console
@@ -71,8 +71,9 @@ DiscordAutoDelete.setScope("all")      // "all", "servers", or "dm"
 DiscordAutoDelete.excludeDm("DM_CHANNEL_ID")       // Keep a DM out of auto-delete
 DiscordAutoDelete.excludeServer("GUILD_ID")       // Keep an entire server
 DiscordAutoDelete.excludeDm("DM_CHANNEL_ID", false) // Undo the DM exclusion
-DiscordAutoDelete.open()               // Reopen hidden dashboard
-DiscordAutoDelete.hide()               // Hide without pausing
+DiscordAutoDelete.open()               // Expand the dashboard from mini view
+DiscordAutoDelete.minimize()           // Show compact draggable live stats
+DiscordAutoDelete.hide()               // Alias for minimize(), never stops timers
 DiscordAutoDelete.openDiagnostics()    // Show diagnostic log
 DiscordAutoDelete.pause()              // Disable and cancel queued timers
 DiscordAutoDelete.stop()               // Remove script UI and stop
@@ -102,13 +103,13 @@ DiscordAutoDelete.stop()               // Remove script UI and stop
 - **Not a message-history cleaner.** The script does not automatically erase messages sent before you enable it.
 - **Unofficial and fragile.** Discord can change undocumented Webpack exports, event handling or deletion methods at any time.
 - **Limited fallback coverage.** Cache-only monitoring observes the currently open channel, **not every server and DM globally**. Listing all available DMs and servers for exclusion also depends on the runtime. Use **Exclude current** or manually enter a channel/server ID if the list is incomplete.
-- **Browser-tab lifecycle.** Refreshing the page stops the script and loses its pending timers. **Disable** also cancels timers; **minimizing the UI does not**.
+- **Browser-tab lifecycle.** Refreshing the page stops the script and loses its pending timers. **Disable** also cancels timers; **minimizing the UI does not**. Mini-window position lasts only for the current browser page session.
 - **Not a privacy or security guarantee.** This does not provide end-to-end disappearing-message protection.
 - **Discord's [self-bot policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots)** prohibits automating normal user accounts. Account sanctions are possible. An officially supported alternative for permitted use cases is the [Discord bot API](https://discord.com/developers/docs/intro).
 
 ## Project status
 
-**v3.14 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
+**v3.15 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
 
 - [Source code](./autodelete.js)
 - [Manual QA test plan](./QA_TEST_PLAN.md)
