@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.14
+# Manual QA Plan — Discord AutoDelete v3.15
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -15,6 +15,21 @@
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.15 — draggable mini view (no message deletion necessary)
+
+1. Open a fresh Discord Web tab, review and run `autodelete.js`. Verify **AutoDelete v3.15** starts disabled and full-sized.
+2. Click **Minimize (−)**. The full controls must be replaced with a small frosted-glass window showing **only Queued / Deleted / Errors**, plus a small **↗ Expand** button. A blank overlay or pill with only the title is a failure.
+3. Grab the compact window by any non-button surface. Drag it horizontally and vertically, including close to screen edges. It should stay on-screen and release when the pointer is lifted.
+4. Click **↗** and verify the complete dashboard returns at the same general position, without losing delay settings or exclusions. Repeat minimization and expansion several times.
+5. In the Console call `DiscordAutoDelete.minimize()` and `DiscordAutoDelete.open()`; check they behave identically to the UI buttons. `DiscordAutoDelete.hide()` now enters compact status mode, rather than hiding everything.
+6. Click Minimize while **disabled** and verify all counters remain available, and the compact view uses the inactive (blue) style.
+7. If performing a low-volume test in a controlled test channel, enable the script, select a long delay, send **one harmless** test message, minimize, and verify **Queued** increases in the mini view. Expand or disable to cancel the timer. Avoid mass tests.
+8. If a matching deletion event is observed after an AutoDelete attempt, **Deleted** updates in both views. If no event is seen, it can remain 0; it is not guaranteed server confirmation.
+9. Disable auto-delete and confirm queued timers cancel, including while minimized; confirm closing the full panel stops the script entirely.
+10. Reload Discord. The script is gone and no pending timer survives refresh.
+
+Do not paste tokens or private message content into issue reports. Discord's policy prohibits this form of normal-account automation.
 
 ## v3.14 — excluded DMs and servers, live countdowns
 
