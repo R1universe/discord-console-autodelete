@@ -1,6 +1,20 @@
 # AutoDelete — development notes and legacy release history
 
-This file preserves the original long-form README through v3.13, moved out of the landing page on 26 October 2026. It is historical material: old defaults, labels and limitations may no longer describe the current script. For current usage see [the main README](../README.md).
+This file preserves the original long-form README and release notes through v3.14, moved out of the landing page on 26 October 2026. It is historical material: old defaults, labels and limitations may no longer describe the current script. For current usage see [the main README](../README.md).
+
+---
+
+# Discord AutoDelete v3.14 — exclusions, countdowns and author credit
+
+- **Excluded DMs / Excluded Servers** replace the 4s presets. Each opens a selector for locations Discord's client exposes; you can exclude the currently selected conversation/server or enter a channel/guild ID. Saved identifiers persist locally. Newly excluded locations immediately cancel their queued jobs.
+- The 60s presets and editable custom delays remain.
+- Remove "Your messages only" and "1s–24h" hints; center the scope, DM and server section labels.
+- Header adds **by Archivarius**.
+- **Deleted** replaces **Requests** in the visible counter, but now counts only observed matching `MESSAGE_DELETE` events after the script's own attempt, not calls alone. Missing event coverage can undercount deletions.
+- Diagnostics adds a continuously refreshed countdown (rounded to whole seconds) for up to eight upcoming deletion attempts, without message contents, user names or IDs. The activity log also includes the scheduled delay.
+- The UI remains a standalone browser console script; internal deletion mechanisms, scope and auto-disable-on-refresh behavior are unchanged.
+
+**Verification:** Updated Node.js mock/UI tests cover exclusion cancellation, filtering, persistence, selector interaction and delete-event metrics. Live Discord compatibility and true server-side deletion are not proven by these tests. Discord self-bot automation is prohibited.
 
 ---
 
