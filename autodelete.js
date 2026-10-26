@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.14 — chat/server exclusions and live expiry diagnostics
+ * Discord AutoDelete v3.15 — draggable minimized status window
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.14.0";
+  const VERSION = "3.15.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -141,6 +141,16 @@
     ".picker-option input{accent-color:#35c878;flex:none}.picker-action{padding:9px 12px;margin:4px 0 7px;min-height:36px;width:100%;font-size:11px}",
     ".picker-input-row{display:flex;gap:7px;margin-top:8px}.picker-input-row input{min-width:0;width:100%;font-size:11px}.picker-input-row button{width:auto;white-space:nowrap;padding:8px 10px}",
     ".countdowns{max-height:130px;overflow-y:auto;font-size:10px;font-family:ui-monospace,SFMono-Regular,monospace;color:#d4ecdf;line-height:1.7}.countdown-item{padding:2px 0}.countdown-item span{color:#8ff5c5;font-variant-numeric:tabular-nums}",
+    /* Minimized, draggable frosted-glass status view. */
+    ".mini-panel{position:relative;width:250px;max-width:calc(100vw - 12px);padding:14px 10px 11px;border:1px solid #b3ceff9a;border-radius:18px;background:radial-gradient(ellipse at 80% -20%,#7d9aff36,transparent 78%),linear-gradient(150deg,#273251ec,#101824ee);backdrop-filter:blur(25px) saturate(155%);-webkit-backdrop-filter:blur(25px) saturate(155%);box-shadow:inset 0 1px 0 #ffffff61,0 12px 32px #000b,0 0 19px #6f7cff28;color:#eef1f4;cursor:grab;touch-action:none;user-select:none}",
+    ".mini-panel.is-active{border-color:#9cffe0bf;background:radial-gradient(ellipse at 85% -25%,#4affe448,transparent 78%),linear-gradient(155deg,#1c4943ed,#0d2524f0);box-shadow:inset 0 1px 0 #ffffff80,0 12px 32px #000b,0 0 20px #40ffb94a}",
+    ".mini-panel.is-error{border-color:#f2a8b7}.mini-panel:active{cursor:grabbing}",
+    ".mini-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-right:10px}",
+    ".mini-stat{min-width:0;text-align:center;border-radius:10px;border:1px solid #e5ebff36;background:#ffffff12;padding:8px 2px 7px;display:flex;flex-direction:column;gap:3px;align-items:center}",
+    ".mini-panel.is-active .mini-stat{border-color:#baffdb45;background:#72ffd419}",
+    ".mini-stat strong{font-size:18px;line-height:1.1;color:#f7fffa;font-variant-numeric:tabular-nums}.mini-stat span{font-size:9px;color:#d7e4e8;font-weight:600;letter-spacing:-.1px}",
+    ".mini-restore{position:absolute;top:5px;right:5px;border:1px solid #d5edff55;border-radius:7px;background:#ffffff20;color:#edf5ff;font-size:13px;line-height:17px;width:22px;height:22px;padding:0;cursor:pointer}.mini-restore:hover{background:#ffffff3a}.mini-restore:focus-visible{outline:2px solid #9dffdb;outline-offset:2px}",
+    ".mini-panel[hidden]{display:none!important}",
     "@media(prefers-reduced-motion:reduce){.panel,.primary{transition:none}}"
   ].join("\n");
   shadow.appendChild(style);
@@ -150,7 +160,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.14</span></h1><div class="brand-by">by Archivarius</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.15</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -194,7 +204,15 @@
           '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
         '</div>',
       '</details></div>',
-    '</section>'
+    '</section>',
+    '<aside class="mini-panel" id="ad-mini-panel" hidden role="region" aria-label="Minimized AutoDelete status">',
+      '<button type="button" class="mini-restore" id="ad-restore" title="Expand AutoDelete" aria-label="Expand AutoDelete">↗</button>',
+      '<div class="mini-stats">',
+        '<div class="mini-stat"><strong id="ad-mini-queued">0</strong><span>Queued</span></div>',
+        '<div class="mini-stat" title="Observed deletion events, not guaranteed server confirmations"><strong id="ad-mini-deleted">0</strong><span>Deleted</span></div>',
+        '<div class="mini-stat" title="Caught errors; background failures may not appear"><strong id="ad-mini-errors">0</strong><span>Errors</span></div>',
+      '</div>',
+    '</aside>'
   ].join("");
   shadow.appendChild(root);
   const el = id => shadow.getElementById(id);
@@ -262,6 +280,9 @@
     const panel = el("ad-panel");
     panel.classList.toggle("is-active", isActive);
     panel.classList.toggle("is-error", Boolean(state.error));
+    const mini = el("ad-mini-panel");
+    mini.classList.toggle("is-active", isActive);
+    mini.classList.toggle("is-error", Boolean(state.error));
     // Compact by default. Connection failures remain visible in the main panel.
     el("ad-error").style.display = state.error ? "block" : "none";
     el("ad-error").textContent = state.error ? "Connection failed: " + state.error : "";
@@ -302,6 +323,9 @@
     el("ad-exclude-servers").setAttribute("aria-expanded", String(pickerKind === "servers"));
     renderCountdowns();
     el("ad-failed").textContent = state.failed;
+    el("ad-mini-queued").textContent = state.pending.size;
+    el("ad-mini-deleted").textContent = state.deleted;
+    el("ad-mini-errors").textContent = state.failed;
 
   }
 
@@ -959,29 +983,60 @@
     btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
   shadow.querySelectorAll("[data-scope]").forEach(btn =>
     btn.addEventListener("click", () => setScope(btn.dataset.scope)));
-  // Minimize hides the ENTIRE floating overlay, not a replacement pill.
-  // The monitoring timers and listeners keep running. Reopen through
-  // DiscordAutoDelete.open() or by pasting this same script again.
-  function hidePanel() { host.style.display = "none"; }
-  function showPanel() { host.style.display = ""; }
-  el("ad-min").addEventListener("click", hidePanel);
+  // Switching views never stops monitoring or cancels any timer.
+  function clampPosition() {
+    if (!host.style.left || host.style.left === "auto") return;
+    const rect = host.getBoundingClientRect();
+    const left = parseFloat(host.style.left), top = parseFloat(host.style.top);
+    if (Number.isFinite(left))
+      host.style.left = Math.max(6, Math.min(left, Math.max(6, window.innerWidth - rect.width - 6))) + "px";
+    if (Number.isFinite(top))
+      host.style.top = Math.max(6, Math.min(top, Math.max(6, window.innerHeight - rect.height - 6))) + "px";
+  }
+  function minimizePanel() {
+    if (state.destroyed) return;
+    el("ad-panel").style.display = "none";
+    el("ad-mini-panel").hidden = false;
+    el("ad-mini-panel").style.display = "";
+    clampPosition();
+    render();
+  }
+  function showPanel() {
+    if (state.destroyed) return;
+    el("ad-mini-panel").hidden = true;
+    el("ad-mini-panel").style.display = "none";
+    el("ad-panel").style.display = "";
+    clampPosition();
+    render();
+  }
+  el("ad-min").addEventListener("click", minimizePanel);
+  el("ad-restore").addEventListener("click", showPanel);
 
-  // Optional drag handle: only the header moves the overlay.
+  // Main header and compact status view both act as drag handles.
+  // Pointerdown on the restore/minimize/close buttons must not start dragging.
   let moving = null;
   const onMove = event => {
     if (!moving) return;
-    host.style.left = Math.max(6, Math.min(window.innerWidth - 44, event.clientX - moving.dx)) + "px";
-    host.style.top = Math.max(6, Math.min(window.innerHeight - 44, event.clientY - moving.dy)) + "px";
+    const rect = host.getBoundingClientRect();
+    const maxX = Math.max(6, window.innerWidth - rect.width - 6);
+    const maxY = Math.max(6, window.innerHeight - rect.height - 6);
+    host.style.left = Math.max(6, Math.min(maxX, event.clientX - moving.dx)) + "px";
+    host.style.top = Math.max(6, Math.min(maxY, event.clientY - moving.dy)) + "px";
   };
   const onUp = () => { moving = null; };
-  el("ad-head").addEventListener("pointerdown", event => {
-    if (event.target.closest("button")) return;
+  const startDrag = event => {
+    if (event.target?.closest?.("button")) return;
+    if (event.button != null && event.button !== 0) return;
     const rect = host.getBoundingClientRect();
     moving = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
     host.style.right = "auto";
-  });
+    event.preventDefault?.();
+  };
+  el("ad-head").addEventListener("pointerdown", startDrag);
+  el("ad-mini-panel").addEventListener("pointerdown", startDrag);
   document.addEventListener("pointermove", onMove);
   document.addEventListener("pointerup", onUp);
+  document.addEventListener("pointercancel", onUp);
 
   function stop() {
     if (state.destroyed) return;
@@ -990,6 +1045,7 @@
     if (ticker) clearInterval(ticker);
     document.removeEventListener("pointermove", onMove);
     document.removeEventListener("pointerup", onUp);
+    document.removeEventListener("pointercancel", onUp);
     host.remove();
     try { delete window[NAME]; } catch { window[NAME] = undefined; }
     console.info("[AutoDelete] Stopped. Dashboard removed.");
@@ -999,7 +1055,8 @@
     get running() { return state.ready && state.enabled && !state.destroyed; },
     get connected() { return state.ready; },
     open() { showPanel(); },
-    hide() { hidePanel(); },
+    hide() { minimizePanel(); },
+    minimize() { minimizePanel(); },
     openDiagnostics() {
       showPanel();
       el("ad-diagnostics").open = true;
