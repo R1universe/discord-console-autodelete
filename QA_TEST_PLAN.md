@@ -1,4 +1,4 @@
-# Manual QA Plan — Discord AutoDelete v3.13
+# Manual QA Plan — Discord AutoDelete v3.14
 
 **Status (October 25, 2026):** The user completed nine initial behavior tests on **v3.3**, then reproduced `Queued=2` for one visible message. The read-only queue diagnostic showed **M2 (temporary, SENDING, id=nonce) and M3 (confirmed server ID, SENT) sharing nonce N1**. v3.4 rejects M2 and schedules only M3 in mocked regression tests, but **has not been retested live**. HTTP 404/429 and limited observability remain [Issue #2](https://github.com/R1universe/discord-console-autodelete/issues/2).
 
@@ -11,10 +11,31 @@
 - Read the JavaScript source before running it. Never share a Discord account token, cookie or Authorization header.
 - Close unrelated sensitive chats and use a test channel.
 - After clicking **Pause** or closing the overlay, all pending timers are cancelled; after a refresh, the script and its pending queue disappear.
-- Current UI labels counters **Requests** (delete method calls) and **Errors** (caught failures); neither measures all server-confirmed outcomes or background HTTP failures.
+- Current UI labels counters **Deleted** (matching observed deletion events after a request) and **Errors** (caught failures). **Deleted** may undercount in cache-only mode; neither guarantees that every HTTP outcome is observed.
 - **Open-channel cache fallback** can miss events while switching channels or with the browser tab in the background.
 - To avoid surprise deletion, use a non-default scope until you understand how it behaves.
 - Record observed deletion time to the nearest second if practical; tiny deviations are expected, especially for background tabs.
+
+## v3.14 — excluded DMs and servers, live countdowns
+
+**Local-only checks (no messages need to be sent):**
+
+1. Load reviewed v3.14. Check **by Archivarius** below the title, centered section headings, no "Your messages only" and no "1s–24h" notes.
+2. Verify the old **4s** preset in each delay row is now **Excluded DMs** or **Excluded Servers**; **60s** remains clickable; the numeric delay input still accepts 1–86400 seconds.
+3. Click **Excluded Servers**, verify a selector appears. In an ordinary server channel choose **Exclude currently open server**. Check the button now shows one exclusion. Open the selector again and uncheck the selected server; verify count falls.
+4. In a personal/consenting DM, click **Excluded DMs** and exclude the current channel. Toggle off again. Check that choices are not read as message contents and that only channel/server IDs are saved locally.
+5. Reload Discord, paste reviewed script again. Exclusions and delays persist; script **starts disabled**.
+6. Check Diagnostics can be expanded even while paused and that pending countdowns do not display message content or real identifiers.
+
+**Optional low-volume behavior check on harmless test messages:**
+
+1. Enable AutoDelete and set a long timer. Send one harmless message in a server. Open Diagnostics and check a countdown is shown for a deletion *attempt*, with decreasing remaining time.
+2. Exclude that server before expiry: **Queued** should drop and the pending deletion should be cancelled. Do not expect the test message to disappear.
+3. Unexclude and send a new harmless message. **Deleted** must **not** increment just because the timer fires; it only increments when a matching `MESSAGE_DELETE` is actually observed.
+4. If using cache-only fallback, **Deleted** may remain 0 even if a deletion succeeded, because not all deletion events are visible. Avoid claiming server confirmation from counters.
+5. Confirm **Disable** and Close cancel pending jobs, with no deletion after the tool stops.
+
+The project is an experimental self-bot prototype. Do not test by spamming, perform high-volume deletions, or share credentials/private message content.
 
 ## v3.13 — true minimize without pill
 
