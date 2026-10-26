@@ -632,6 +632,7 @@
       notify("Observed message deletion after AutoDelete request.", "good");
     }
     cancel(id);
+    render(); // A timer may have left pending before MESSAGE_DELETE arrives.
   }
 
   // Cache polling is an independent fallback when Discord does not expose a
