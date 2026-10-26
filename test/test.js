@@ -821,6 +821,65 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
+
+  // v3.14 exclusion rules apply to existing and future jobs.
+  const ex = createEnvironment();
+  vm.runInContext(source, ex.context, { timeout: 3000 });
+  const protectedApi = ex.window.DiscordAutoDelete;
+  protectedApi.resume();
+  ex.post("555555555555555555", ex.account.id, "333333333333333333");
+  ex.post("666666666666666666");
+  assert.equal(protectedApi.status().pending, 2);
+  protectedApi.excludeDm("333333333333333333");
+  assert.equal(protectedApi.status().pending, 1, "DM exclusion cancels queued DM timer");
+  protectedApi.excludeServer("222222222222222222");
+  assert.equal(protectedApi.status().pending, 0, "Server exclusion cancels queued server timer");
+  ex.post("777777777777777777", ex.account.id, "333333333333333333");
+  ex.post("888888888888888888");
+  assert.equal(protectedApi.status().pending, 0, "Exclude future messages");
+  assert.equal(protectedApi.status().excludedDms, 1);
+  assert.equal(protectedApi.status().excludedServers, 1);
+  protectedApi.excludeDm("333333333333333333", false);
+  protectedApi.excludeServer("222222222222222222", false);
+  ex.post("999999999999999991", ex.account.id, "333333333333333333");
+  ex.post("999999999999999992");
+  assert.equal(protectedApi.status().pending, 2, "Removing exclusions restores monitoring");
+  assert.throws(() => protectedApi.excludeDm("bogus"), /valid Discord/);
+  await ex.flushTimers();
+  assert.equal(protectedApi.status().requests, 2);
+  assert.equal(protectedApi.status().deleted, 0, "Calls alone must never imply observed deletion");
+  ex.emitDelete("999999999999999991");
+  ex.emitDelete("999999999999999991");
+  ex.emitDelete("999999999999999992");
+  ex.emitDelete("999999999999999993");
+  assert.equal(protectedApi.status().deleted, 2, "Count two matching observed deletes, never duplicates or others");
+  assert.equal(ex.ids.get("ad-deleted").textContent, 2);
+  protectedApi.stop();
+
+  // Click the actual new selector to exclude the currently open server.
+  const pickerEnv = createEnvironment({ withMessageStore: true });
+  vm.runInContext(source, pickerEnv.context, { timeout: 3000 });
+  pickerEnv.ids.get("ad-exclude-servers").dispatch("click");
+  assert.equal(pickerEnv.ids.get("ad-picker").hidden, false, "Server picker opens");
+  pickerEnv.ids.get("ad-exclude-current").dispatch("click");
+  assert.equal(pickerEnv.window.DiscordAutoDelete.status().excludedServers, 1);
+  pickerEnv.ids.get("ad-exclude-servers").dispatch("click");
+  assert.equal(pickerEnv.ids.get("ad-picker").hidden, true, "Server picker closes");
+  pickerEnv.window.DiscordAutoDelete.stop();
+
+  // Exclusions are persistent, but deletion is always disabled after reload.
+  const remembered = createEnvironment({ initialStorage: [
+    ["discord-autodelete-ui-v2", JSON.stringify({
+      scope: "all", excludedDms: ["333333333333333333"],
+      excludedGuilds: ["222222222222222222"]
+    })]
+  ] });
+  vm.runInContext(source, remembered.context, { timeout: 3000 });
+  assert.equal(remembered.window.DiscordAutoDelete.status().excludedDms, 1);
+  assert.equal(remembered.window.DiscordAutoDelete.status().excludedServers, 1);
+  assert.equal(remembered.window.DiscordAutoDelete.running, false);
+  remembered.window.DiscordAutoDelete.stop();
+
   console.log("PASS: v3.14 exclusions, countdown and deletion reporting alongside existing regressions");
 })().catch(err => {
   console.error(err);
