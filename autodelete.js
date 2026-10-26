@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.13 — minimize completely hides overlay; experimental console prototype
+ * Discord AutoDelete v3.14 — chat/server exclusions and live expiry diagnostics
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.13.0";
+  const VERSION = "3.14.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -32,15 +32,19 @@
   const config = {
     serverDelay: validDelay(saved.serverDelay) ? Number(saved.serverDelay) : legacyDelay,
     dmDelay: validDelay(saved.dmDelay) ? Number(saved.dmDelay) : legacyDelay,
-    scope: scopes.has(saved.scope) ? saved.scope : "all"
+    scope: scopes.has(saved.scope) ? saved.scope : "all",
+    excludedDms: Array.isArray(saved.excludedDms) ? [...new Set(saved.excludedDms.filter(validId).map(String))].slice(0, 300) : [],
+    excludedGuilds: Array.isArray(saved.excludedGuilds) ? [...new Set(saved.excludedGuilds.filter(validId).map(String))].slice(0, 300) : []
   };
   const state = {
     ready: false, enabled: false, error: "", pending: new Map(),
-    requests: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(), cacheSeen: new Map(), monitor: "",
+    requests: 0, deleted: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(),
+    attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false
   };
   let ticker = null;
   let hooks = null;
+  let pickerKind = null;
 
   function save() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(config)); } catch {}
@@ -129,6 +133,14 @@
     ".panel.is-active .footer{border-top-color:#b5ffde69;background:linear-gradient(150deg,#a4ffcf21,#154c457f)}",
     ".diagnostics>summary{padding:14px 1px;color:#e3e9fa;font-weight:650}.diagnostics>summary:after{color:#e9eeff}",
     ".footer button.diag-action{border-radius:13px;border-color:#b3c8ff75;background:linear-gradient(140deg,#bac9ff33,#283c627f);box-shadow:inset 0 1px 0 #fff5}",
+    ".fieldrow{justify-content:center;text-align:center}.fieldrow label{text-align:center}.brand-by{font-size:10px;color:var(--ad-muted);margin-top:3px;font-weight:500}",
+    ".delay{grid-template-columns:minmax(0,.9fr) minmax(0,1.4fr) minmax(0,.9fr)}.exclude-btn{font-size:10px;line-height:1.3;padding:10px 3px;white-space:normal;overflow-wrap:anywhere}",
+    ".picker{border:1px solid var(--ad-border);border-radius:14px;background:linear-gradient(145deg,#192d2bde,#0b191ce8);padding:12px;margin:2px 0 16px;box-shadow:inset 0 1px 0 #ffffff18}.picker[hidden]{display:none}",
+    ".picker-title{text-align:center;font-weight:700;font-size:12px;margin:0 0 9px}.picker-note{font-size:10px;color:#c9d1d9;line-height:1.5;margin:6px 0}",
+    ".picker-list{max-height:180px;overflow-y:auto;display:grid;gap:4px}.picker-option{display:flex;align-items:center;gap:8px;min-width:0;font-size:11px;padding:7px 6px;border:1px solid #ffffff1f;border-radius:9px;overflow-wrap:anywhere}",
+    ".picker-option input{accent-color:#35c878;flex:none}.picker-action{padding:9px 12px;margin:4px 0 7px;min-height:36px;width:100%;font-size:11px}",
+    ".picker-input-row{display:flex;gap:7px;margin-top:8px}.picker-input-row input{min-width:0;width:100%;font-size:11px}.picker-input-row button{width:auto;white-space:nowrap;padding:8px 10px}",
+    ".countdowns{max-height:130px;overflow-y:auto;font-size:10px;font-family:ui-monospace,SFMono-Regular,monospace;color:#d4ecdf;line-height:1.7}.countdown-item{padding:2px 0}.countdown-item span{color:#8ff5c5;font-variant-numeric:tabular-nums}",
     "@media(prefers-reduced-motion:reduce){.panel,.primary{transition:none}}"
   ].join("\n");
   shadow.appendChild(style);
@@ -138,7 +150,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.13</span></h1></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.14</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -147,28 +159,37 @@
         '<div class="limited-alert" id="ad-limited" style="display:none">Limited coverage: current channel only</div>',
         '<button class="primary" id="ad-toggle" disabled>Checking connection…</button>',
         '<button class="reconnect" id="ad-retry" style="display:none">Retry connection</button>',
-        '<div class="field"><div class="fieldrow"><label id="ad-scope-label">Where to delete</label><span class="hint">Your messages only</span></div>',
+        '<div class="field"><div class="fieldrow"><label id="ad-scope-label">Where to delete</label></div>',
           '<div class="scope-switch" role="group" aria-labelledby="ad-scope-label">',
             '<button type="button" class="scope-btn" data-scope="all" aria-pressed="true">Everywhere</button>',
             '<button type="button" class="scope-btn" data-scope="servers" aria-pressed="false">Servers</button>',
             '<button type="button" class="scope-btn" data-scope="dm" aria-pressed="false">DMs</button>',
           '</div></div>',
-        '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label><span class="hint">1s–24h</span></div>',
+        '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label></div>',
           '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay-for="dm" data-delay="4">4s</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
+          '<button type="button" class="preset exclude-btn" id="ad-exclude-dm" aria-expanded="false">Excluded DMs ›</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
         '</div></div></div>',
-        '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label><span class="hint">1s–24h</span></div>',
+        '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label></div>',
           '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
-          '<button class="preset" data-delay-for="servers" data-delay="4">4s</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
+          '<button type="button" class="preset exclude-btn" id="ad-exclude-servers" aria-expanded="false">Excluded Servers ›</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
         '</div></div></div>',
+        '<section class="picker" id="ad-picker" hidden aria-label="Exclusion picker">',
+          '<div class="picker-title" id="ad-picker-title"></div>',
+          '<div class="picker-note" id="ad-picker-note">Select chats or servers to keep out of automatic deletion. Existing queued timers in excluded locations will be cancelled.</div>',
+          '<button type="button" class="preset picker-action" id="ad-exclude-current">Exclude current conversation / server</button>',
+          '<div class="picker-list" id="ad-picker-list"></div>',
+          '<div class="picker-input-row"><input class="value" id="ad-exclude-id" inputmode="numeric" type="text" autocomplete="off" placeholder="Channel / server ID" aria-label="ID to exclude"><button type="button" class="preset" id="ad-add-exclude">Add ID</button></div>',
+          '<div class="picker-note">Only identifiers are stored locally. If the list is incomplete, open that chat/server and use Exclude current, or enter its ID.</div>',
+        '</section>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
-        '<div class="stat" title="Deletion calls attempted; not verified server deletions"><strong id="ad-requests">0</strong><span>Requests</span></div>',
+        '<div class="stat" title="Deletion events observed after an AutoDelete attempt; may miss deletion confirmations"><strong id="ad-deleted">0</strong><span>Deleted</span></div>',
         '<div class="stat" title="Errors caught by this script; background HTTP failures may not appear"><strong id="ad-failed">0</strong><span>Errors</span></div></div>',
       '</div>',
       '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
         '<summary>Diagnostics</summary>',
         '<div class="diag-body">',
           '<div class="diag-title">ACTIVITY LOG <span class="hint">· No message text stored</span></div>',
+          '<div class="countdowns" id="ad-countdowns" aria-live="off"></div>',
           '<div class="loglist" id="ad-logs" aria-live="polite"></div>',
           '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
         '</div>',
@@ -199,6 +220,36 @@
     }
     if (tone === "bad") console.warn("[AutoDelete] " + message);
     else console.info("[AutoDelete] " + message);
+  }
+
+  function formatRemaining(milliseconds) {
+    const s = Math.max(0, Math.ceil(milliseconds / 1000));
+    if (s < 60) return s + "s";
+    const m = Math.floor(s / 60), seconds = s % 60;
+    return m + "m " + String(seconds).padStart(2, "0") + "s";
+  }
+  function renderCountdowns() {
+    const target = el("ad-countdowns");
+    if (!target) return;
+    target.replaceChildren();
+    const jobs = [...state.pending.values()].sort((a,b) => a.deadline - b.deadline).slice(0, 8);
+    if (!jobs.length) return;
+    jobs.forEach((job, index) => {
+      const line = document.createElement("div");
+      line.className = "countdown-item";
+      const time = document.createElement("span");
+      time.textContent = formatRemaining(job.deadline - Date.now());
+      const prefix = document.createElement("span");
+      prefix.textContent = (job.kind === "dm" ? "DM" : "Server") + " #" + (index + 1) + " · deletion attempt in ";
+      line.append(prefix, time);
+      target.appendChild(line);
+    });
+    if (state.pending.size > jobs.length) {
+      const more = document.createElement("div");
+      more.className = "countdown-item";
+      more.textContent = "+ " + (state.pending.size - jobs.length) + " other pending timers";
+      target.appendChild(more);
+    }
   }
 
   // Track edits independently of ShadowRoot.activeElement to avoid focus
@@ -244,7 +295,12 @@
       btn.classList.toggle("selected", Number(btn.dataset.delay) === seconds);
     });
     el("ad-pending").textContent = state.pending.size;
-    el("ad-requests").textContent = state.requests;
+    el("ad-deleted").textContent = state.deleted;
+    el("ad-exclude-dm").textContent = "Excluded DMs (" + config.excludedDms.length + ") ›";
+    el("ad-exclude-servers").textContent = "Excluded Servers (" + config.excludedGuilds.length + ") ›";
+    el("ad-exclude-dm").setAttribute("aria-expanded", String(pickerKind === "dm"));
+    el("ad-exclude-servers").setAttribute("aria-expanded", String(pickerKind === "servers"));
+    renderCountdowns();
     el("ad-failed").textContent = state.failed;
 
   }
@@ -443,6 +499,8 @@
       typeof x?.getMessage === "function"), storeNamed("MessageStore"), "MessageStore", notes);
     const selected = pick(matches(x => typeof x?.getChannelId === "function"),
       storeNamed("SelectedChannelStore"), "SelectedChannelStore", notes);
+    const guildStore = pick(matches(x => typeof x?.getGuilds === "function" && typeof x?.getGuild === "function"),
+      storeNamed("GuildStore"), "GuildStore", notes);
     const channel = pick(matches(x => typeof x?.getChannel === "function" &&
       (typeof x?.getDMFromUserId === "function" || typeof x?.getChannels === "function")),
       storeNamed("ChannelStore"), "ChannelStore", notes);
@@ -466,7 +524,7 @@
         (dispatchers.length || (store && selected))) {
       return {
         users, actions, rest, messageStore: store, selectedChannel: selected,
-        channelStore: channel, dispatchers, accountId, moduleCount: all.length, ignoredProxies: lookupStats.ignored,
+        channelStore: channel, guildStore, dispatchers, accountId, moduleCount: all.length, ignoredProxies: lookupStats.ignored,
         discovery: notes
       };
     }
@@ -512,6 +570,12 @@
     if (!validId(id) || !validId(channelId) || state.pending.has(id) || state.processed.has(id)) return;
     const kind = classifyChannel(msg, channelId);
     if (!scopeMatches(kind)) { state.skipped++; return; }
+    const guildId = String(msg.guild_id ?? msg.guildId ?? hooks?.channelStore?.getChannel(channelId)?.guild_id ?? "");
+    if ((kind === "dm" && config.excludedDms.includes(channelId)) ||
+        (kind === "servers" && config.excludedGuilds.includes(guildId))) {
+      state.skipped++;
+      return;
+    }
     const delaySeconds = kind === "servers" ? config.serverDelay : config.dmDelay;
     // Some clients emit more than one confirmed object for the same send.
     // The client nonce correlates them without reading/storing message text.
@@ -540,6 +604,8 @@
       // MessageActions may return void and perform async HTTP in the background,
       // so resolving this call is NOT a server-confirmed successful deletion.
       state.requests++;
+      state.attemptedIds.add(id);
+      if (state.attemptedIds.size > 1500) state.attemptedIds.delete(state.attemptedIds.values().next().value);
       try {
         if (hooks.rest) {
           await Promise.resolve(hooks.rest.del({ url: "/channels/" + channelId + "/messages/" + id }));
@@ -553,11 +619,20 @@
       }
       render();
     }, delaySeconds * 1000);
-    state.pending.set(id, { timer, deadline, kind });
-    notify((kind === "dm" ? "DM" : "Server") + " message queued for " + delaySeconds + "s.");
+    state.pending.set(id, { timer, deadline, kind, channelId, guildId });
+    notify((kind === "dm" ? "DM" : "Server") + " message scheduled for a deletion attempt in " + delaySeconds + "s.");
     render();
   }
-  function onDelete(event) { cancel(event?.id ?? event?.messageId ?? event?.message?.id); }
+  function onDelete(event) {
+    const id = String(event?.id ?? event?.messageId ?? event?.message?.id ?? "");
+    if (!validId(id)) return;
+    if (state.attemptedIds.has(id) && !state.countedDeleted.has(id)) {
+      state.countedDeleted.add(id);
+      state.deleted++;
+      notify("Observed message deletion after AutoDelete request.", "good");
+    }
+    cancel(id);
+  }
 
   // Cache polling is an independent fallback when Discord does not expose a
   // usable FluxDispatcher. It only sees messages in the currently open channel.
@@ -614,6 +689,8 @@
     state.ready = false;
     state.enabled = false;
     state.cacheSeen.clear();
+    pickerKind = null;
+    renderPicker();
     clearPending();
   }
   function connect() {
@@ -651,6 +728,7 @@
       notify("Connection error: " + state.error, "bad");
     }
     render();
+    if (pickerKind) renderPicker();
     return state.ready;
   }
   function pause() { state.enabled = false; clearPending(); notify("Paused — scheduled deletions cancelled."); render(); }
@@ -679,6 +757,131 @@
     notify((kind === "dm" ? "DM" : "Server") + " delay set to " + seconds + "s (new messages only).");
     return seconds;
   }
+  // Exclusions affect only the selected locations; existing queued jobs there
+  // are cancelled immediately. No user token or message content is read.
+  function exclude(kind, value, selected = true) {
+    if (kind !== "dm" && kind !== "servers") throw new RangeError("Exclusion kind: dm | servers");
+    const id = String(value ?? "");
+    if (!validId(id)) throw new RangeError("Enter a valid Discord channel or server ID.");
+    const key = kind === "dm" ? "excludedDms" : "excludedGuilds";
+    const next = new Set(config[key]);
+    if (selected) next.add(id); else next.delete(id);
+    if (next.size > 300) throw new RangeError("Up to 300 excluded locations per category.");
+    config[key] = [...next];
+    if (selected) {
+      for (const [messageId, job] of [...state.pending.entries()]) {
+        if ((kind === "dm" && job.kind === "dm" && job.channelId === id) ||
+            (kind === "servers" && job.kind === "servers" && job.guildId === id))
+          cancel(messageId);
+      }
+    }
+    save(); render(); if (pickerKind) renderPicker();
+    notify((selected ? "Excluded " : "Restored ") + (kind === "dm" ? "DM channel" : "server") + " from auto-delete.");
+    return config[key].length;
+  }
+  function getChoices(kind) {
+    const found = new Map();
+    const add = (id, name) => {
+      if (!validId(id)) return;
+      const key = String(id);
+      if (!found.has(key)) found.set(key, String(name || (kind === "dm" ? "DM" : "Server") + " · " + key.slice(-5)).slice(0, 90));
+    };
+    const visit = (value, depth = 0) => {
+      if (!value || typeof value !== "object" || depth > 3 || found.size >= 300) return;
+      if (Array.isArray(value)) { value.slice(0, 350).forEach(v => visit(v, depth + 1)); return; }
+      const id = value.id;
+      if (kind === "dm" && (value.type === 1 || value.type === 3) && validId(id)) {
+        const recipients = value.recipients ?? value.recipientIds ?? [];
+        let title = value.name;
+        if (!title && Array.isArray(recipients)) {
+          const names = recipients.map(u => typeof u === "string" ? hooks?.users?.getUser?.(u)?.username : u?.username).filter(Boolean);
+          if (names.length) title = names.join(", ");
+        }
+        add(id, title);
+        return;
+      }
+      if (kind === "servers" && validId(id) && typeof value.name === "string" &&
+          (value.ownerId != null || value.owner_id != null || value.roles != null || value.afk_channel_id !== undefined)) {
+        add(id, value.name);
+        return;
+      }
+      if (depth >= 3) return;
+      try { for (const child of Object.values(value).slice(0, 350)) visit(child, depth + 1); } catch {}
+    };
+    if (kind === "dm") {
+      for (const method of ["getPrivateChannels", "getSortedPrivateChannels", "getChannels"]) {
+        try { visit(hooks?.channelStore?.[method]?.()); } catch {}
+      }
+    } else {
+      try { visit(hooks?.guildStore?.getGuilds?.()); } catch {}
+      try { visit(hooks?.channelStore?.getChannels?.()); } catch {}
+    }
+    const current = String(hooks?.selectedChannel?.getChannelId?.() ?? "");
+    const channel = hooks?.channelStore?.getChannel?.(current);
+    if (kind === "dm" && (channel?.type === 1 || channel?.type === 3)) add(current, channel.name ?? "Current DM · " + current.slice(-5));
+    if (kind === "servers" && validId(channel?.guild_id ?? channel?.guildId))
+      add(channel.guild_id ?? channel.guildId, hooks?.guildStore?.getGuild?.(channel.guild_id ?? channel.guildId)?.name ?? "Current server");
+    return [...found.entries()].sort((a,b) => a[1].localeCompare(b[1])).slice(0, 200);
+  }
+  function renderPicker() {
+    const panel = el("ad-picker");
+    panel.hidden = !pickerKind;
+    panel.style.display = pickerKind ? "" : "none";
+    if (!pickerKind) return;
+    const kind = pickerKind;
+    el("ad-picker-title").textContent = kind === "dm" ? "DMs to keep" : "Servers to keep";
+    el("ad-exclude-id").value = "";
+    const list = el("ad-picker-list");
+    list.replaceChildren();
+    const key = kind === "dm" ? "excludedDms" : "excludedGuilds";
+    const choices = getChoices(kind);
+    for (const id of config[key]) if (!choices.some(([choice]) => choice === id))
+      choices.push([id, "Saved ID · " + id.slice(-5)]);
+    if (!choices.length) {
+      const empty = document.createElement("div");
+      empty.className = "picker-note";
+      empty.textContent = "No locations available to list. Open a conversation/server or enter an ID below.";
+      list.appendChild(empty);
+    }
+    for (const [id, name] of choices) {
+      const row = document.createElement("label");
+      row.className = "picker-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = config[key].includes(id);
+      input.addEventListener("change", () => exclude(kind, id, input.checked));
+      const title = document.createElement("span");
+      title.textContent = name;
+      row.append(input, title);
+      list.appendChild(row);
+    }
+    const current = String(hooks?.selectedChannel?.getChannelId?.() ?? "");
+    const channel = hooks?.channelStore?.getChannel?.(current);
+    const possible = kind === "dm" ? (channel?.type === 1 || channel?.type === 3) :
+      validId(channel?.guild_id ?? channel?.guildId);
+    el("ad-exclude-current").disabled = !possible;
+    el("ad-exclude-current").textContent = kind === "dm" ? "Exclude currently open DM" : "Exclude currently open server";
+  }
+  function togglePicker(kind) {
+    pickerKind = pickerKind === kind ? null : kind;
+    renderPicker(); render();
+  }
+  el("ad-exclude-dm").addEventListener("click", () => togglePicker("dm"));
+  el("ad-exclude-servers").addEventListener("click", () => togglePicker("servers"));
+  el("ad-exclude-current").addEventListener("click", () => {
+    if (!pickerKind) return;
+    const channelId = String(hooks?.selectedChannel?.getChannelId?.() ?? "");
+    const channel = hooks?.channelStore?.getChannel?.(channelId);
+    if (pickerKind === "dm" && (channel?.type === 1 || channel?.type === 3))
+      exclude("dm", channelId);
+    else if (pickerKind === "servers" && validId(channel?.guild_id ?? channel?.guildId))
+      exclude("servers", channel.guild_id ?? channel.guildId);
+  });
+  el("ad-add-exclude").addEventListener("click", () => {
+    if (!pickerKind) return;
+    try { exclude(pickerKind, el("ad-exclude-id").value.trim()); }
+    catch (e) { notify(String(e.message), "bad"); }
+  });
   function setServerDelay(seconds) { return updateDelay("servers", seconds); }
   function setDmDelay(seconds) { return updateDelay("dm", seconds); }
   // Legacy command: sets both delays, keeping older console workflows working.
@@ -803,13 +1006,14 @@
         serverDelaySeconds: config.serverDelay, dmDelaySeconds: config.dmDelay,
         scope: config.scope,
         filteredProxyExports: hooks?.ignoredProxies ?? 0, pending: state.pending.size,
-        requests: state.requests, failed: state.failed, skipped: state.skipped,
-        metricsNote: "requests = attempted delete actions; failed = synchronously/awaitably caught errors only; no server confirmation"
+        requests: state.requests, deleted: state.deleted, failed: state.failed, skipped: state.skipped,
+        excludedDms: config.excludedDms.length, excludedServers: config.excludedGuilds.length,
+        metricsNote: "deleted = observed MESSAGE_DELETE events after attempted calls; 0 can mean missing event coverage; requests are attempts only"
       };
       console.table(snapshot);
       return snapshot;
     },
-    setDelay, setServerDelay, setDmDelay, setScope, pause, resume, retry: connect, stop
+    setDelay, setServerDelay, setDmDelay, setScope, excludeDm: (id,on=true)=>exclude("dm",id,on), excludeServer: (id,on=true)=>exclude("servers",id,on), pause, resume, retry: connect, stop
   };
   Object.defineProperty(window, NAME, { value: controller, configurable: true });
   ticker = setInterval(() => { scanCache(); render(); }, 500);
