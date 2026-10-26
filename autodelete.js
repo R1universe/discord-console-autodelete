@@ -628,6 +628,8 @@
     if (!validId(id)) return;
     if (state.attemptedIds.has(id) && !state.countedDeleted.has(id)) {
       state.countedDeleted.add(id);
+      if (state.countedDeleted.size > 1500)
+        state.countedDeleted.delete(state.countedDeleted.values().next().value);
       state.deleted++;
       notify("Observed message deletion after AutoDelete request.", "good");
     }
@@ -782,13 +784,14 @@
   }
   function getChoices(kind) {
     const found = new Map();
+    let scanned = 0; // A large Discord module tree must not freeze the picker.
     const add = (id, name) => {
       if (!validId(id)) return;
       const key = String(id);
       if (!found.has(key)) found.set(key, String(name || (kind === "dm" ? "DM" : "Server") + " · " + key.slice(-5)).slice(0, 90));
     };
     const visit = (value, depth = 0) => {
-      if (!value || typeof value !== "object" || depth > 3 || found.size >= 300) return;
+      if (!value || typeof value !== "object" || depth > 3 || found.size >= 300 || ++scanned > 2000) return;
       if (Array.isArray(value)) { value.slice(0, 350).forEach(v => visit(v, depth + 1)); return; }
       const id = value.id;
       if (kind === "dm" && (value.type === 1 || value.type === 3) && validId(id)) {
