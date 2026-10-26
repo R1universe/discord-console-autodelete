@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.14.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.15.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -14,7 +14,6 @@ function fakeElement() {
     style: {}, className: "", dataset: {}, value: "", textContent: "",
     innerHTML: "", disabled: false, removed: false, attrs: {},
     setAttribute(name, value) { this.attrs[name] = String(value); },
-    getAttribute(name) { return this.attrs[name] ?? null; },
     getAttribute(name) { return this.attrs[name] ?? null; },
     classList: { add(x) { classes.add(x); }, remove(x) { classes.delete(x); },
       toggle(x, force) { if (force) classes.add(x); else classes.delete(x); },
@@ -66,11 +65,20 @@ function createEnvironment(options = {}) {
     },
     appendChild() {},
   };
+  const documentEvents = new Map();
   const document = {
-    body: { appendChild(node) { overlayHost = node; } },
+    body: { appendChild(node) {
+      overlayHost = node;
+      node.getBoundingClientRect = () => ({
+        left: Number.parseFloat(node.style.left) || 0,
+        top: Number.parseFloat(node.style.top) || 0,
+        width: ids.get("ad-mini-panel")?.hidden === false ? 250 : 392,
+        height: ids.get("ad-mini-panel")?.hidden === false ? 80 : 520
+      });
+    } },
     createElement: fakeElement,
-    addEventListener() {},
-    removeEventListener() {}
+    addEventListener(type, fn) { documentEvents.set(type, fn); },
+    removeEventListener(type) { documentEvents.delete(type); }
   };
   const stored = new Map(options.initialStorage ?? []);
   const localStorage = {
@@ -268,7 +276,7 @@ function createEnvironment(options = {}) {
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
     emitDelete: id => dispatcher.dispatch({ type: "MESSAGE_DELETE", id }),
     flushTimers, timers, deletions, calls, cached, restURLs, stored, presets, scopeButtons,
-    proxyReads, tick: () => interval()
+    proxyReads, tick: () => interval(), documentDispatch: (type, event) => documentEvents.get(type)?.(event)
   };
 }
 
@@ -277,26 +285,49 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
-  // Minimize must completely hide the overlay, not replace it with a pill.
+  // Minimize becomes a tiny, live and draggable status window.
   assert.doesNotMatch(source, /id="ad-pill"|ad-pill-text|class="pill"|\.collapsed \.pill/,
-    "No minimized floating launcher or pill remains in the current source");
+    "Legacy large minimized pill was not restored");
+  assert.match(source, /id="ad-mini-panel" hidden/, "New compact window exists");
+  assert.match(source, /id="ad-restore"/, "Minimized window has expand button");
   assert.ok(e.overlayHost, "Overlay host was mounted");
-  assert.equal(e.overlayHost.style.display, undefined, "Overlay is initially shown");
+  assert.equal(e.overlayHost.style.display, undefined, "Overlay host remains visible");
   e.ids.get("ad-min").dispatch("click");
-  assert.equal(e.overlayHost.style.display, "none",
-    "Minimize button fully removes visible overlay, including click surface");
+  assert.equal(e.overlayHost.style.display, undefined, "Minimize does not hide the entire host");
+  assert.equal(e.ids.get("ad-panel").style.display, "none", "Full dashboard hides");
+  assert.equal(e.ids.get("ad-mini-panel").hidden, false, "Compact status appears");
   assert.equal(api.running, false, "Minimize does not silently start monitoring");
-  api.open();
-  assert.equal(e.overlayHost.style.display, "", "open() restores entire overlay");
+  e.ids.get("ad-restore").dispatch("click");
+  assert.equal(e.ids.get("ad-panel").style.display, "", "Expand restores full dashboard");
+  assert.equal(e.ids.get("ad-mini-panel").hidden, true, "Compact status hides after expand");
   api.hide();
-  assert.equal(e.overlayHost.style.display, "none", "hide() matches Minimize");
+  assert.equal(e.ids.get("ad-mini-panel").hidden, false, "hide() retains minimized status rather than hiding host");
+  api.minimize();
+  assert.equal(e.ids.get("ad-mini-panel").hidden, false, "Explicit minimize() works");
   api.openDiagnostics();
-  assert.equal(e.overlayHost.style.display, "", "openDiagnostics() also reopens overlay");
+  assert.equal(e.ids.get("ad-panel").style.display, "", "openDiagnostics() expands full dashboard");
+  assert.equal(e.ids.get("ad-mini-panel").hidden, true);
   assert.equal(e.ids.get("ad-diagnostics").open, true,
-    "Diagnostics can be opened after complete minimization");
+    "Diagnostics can be opened from compact state");
 
-  // v3.14: exclusions, logs and observed deletion counts.
-  assert.match(source, /AutoDelete <span class="version">v3\.14<\/span>/);
+  // Dragging the mini window moves the host; restore clicks must not start a drag.
+  api.minimize();
+  const mini = e.ids.get("ad-mini-panel");
+  mini.dispatch("pointerdown", { target: { closest: () => null }, clientX: 100, clientY: 140, button: 0 });
+  e.documentDispatch("pointermove", { clientX: 180, clientY: 210 });
+  assert.equal(e.overlayHost.style.left, "80px", "Mini window can move horizontally");
+  assert.equal(e.overlayHost.style.top, "70px", "Mini window can move vertically");
+  e.documentDispatch("pointerup", {});
+  e.documentDispatch("pointermove", { clientX: 500, clientY: 400 });
+  assert.equal(e.overlayHost.style.left, "80px", "Released mini window does not keep moving");
+  mini.dispatch("pointerdown", { target: { closest: () => ({}) }, clientX: 80, clientY: 70, button: 0 });
+  e.documentDispatch("pointermove", { clientX: 700, clientY: 700 });
+  assert.equal(e.overlayHost.style.left, "80px", "Restore button pointerdown never drags the window");
+  e.ids.get("ad-restore").dispatch("click");
+  assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
+
+  // v3.15: a draggable minimized status window and retained v3.14 features.
+  assert.match(source, /AutoDelete <span class="version">v3\.15<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -427,19 +458,25 @@ function createEnvironment(options = {}) {
 
   assert.equal(api.resume(), true);
   e.ids.get("ad-min").dispatch("click");
-  assert.equal(e.overlayHost.style.display, "none",
-    "Active monitoring can be visually hidden without disabling itself");
+  assert.equal(e.ids.get("ad-mini-panel").hidden, false, "Active monitoring switches to compact status");
+  assert.equal(e.ids.get("ad-mini-panel").classList.contains("is-active"), true,
+    "Compact status retains green active styling");
   assert.equal(api.running, true, "Minimize never stops running auto-delete");
   e.post("999999999999999995");
   assert.equal(api.status().pending, 1,
-    "Hidden overlay continues to queue confirmed own messages");
+    "Minimized overlay continues to queue confirmed own messages");
+  assert.equal(e.ids.get("ad-mini-queued").textContent, 1,
+    "Mini Queued counter updates while minimized");
+  assert.equal(e.ids.get("ad-mini-deleted").textContent, 0);
+  assert.equal(e.ids.get("ad-mini-errors").textContent, 0);
   api.open();
-  assert.equal(e.overlayHost.style.display, "",
+  assert.equal(e.ids.get("ad-panel").style.display, "",
     "Restored overlay retains monitoring state");
   await e.flushTimers();
   assert.deepEqual(e.deletions,
     [["444444444444444444", "999999999999999995"]],
-    "Queued message is processed while overlay has been hidden");
+    "Queued message is processed while overlay has been minimized");
+  assert.equal(e.ids.get("ad-mini-queued").textContent, 0, "Mini Queued updates after timer completes");
   assert.ok(panel.classList.contains("is-active"),
     "Resume enables green theme across the panel");
   assert.equal(e.ids.get("ad-toggle").textContent, "Disable",
@@ -854,6 +891,7 @@ function createEnvironment(options = {}) {
   ex.emitDelete("999999999999999993");
   assert.equal(protectedApi.status().deleted, 2, "Count two matching observed deletes, never duplicates or others");
   assert.equal(ex.ids.get("ad-deleted").textContent, 2);
+  assert.equal(ex.ids.get("ad-mini-deleted").textContent, 2, "Mini Deleted updates for observed events");
   protectedApi.stop();
 
   // Click the actual new selector to exclude the currently open server.
@@ -880,7 +918,7 @@ function createEnvironment(options = {}) {
   assert.equal(remembered.window.DiscordAutoDelete.running, false);
   remembered.window.DiscordAutoDelete.stop();
 
-  console.log("PASS: v3.14 exclusions, countdown and deletion reporting alongside existing regressions");
+  console.log("PASS: v3.15 draggable compact live stats, restore behavior, exclusions and prior regressions");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
