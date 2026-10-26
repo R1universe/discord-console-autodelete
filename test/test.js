@@ -1,4 +1,4 @@
-// Local-only, dependency-free smoke/integration tests for autodelete.js v3.13.
+// Local-only, dependency-free smoke/integration tests for autodelete.js v3.14.
 // No Discord login or network. Modules and DOM are intentionally mocked.
 "use strict";
 const assert = require("node:assert/strict");
@@ -14,6 +14,7 @@ function fakeElement() {
     style: {}, className: "", dataset: {}, value: "", textContent: "",
     innerHTML: "", disabled: false, removed: false, attrs: {},
     setAttribute(name, value) { this.attrs[name] = String(value); },
+    getAttribute(name) { return this.attrs[name] ?? null; },
     getAttribute(name) { return this.attrs[name] ?? null; },
     classList: { add(x) { classes.add(x); }, remove(x) { classes.delete(x); },
       toggle(x, force) { if (force) classes.add(x); else classes.delete(x); },
@@ -41,7 +42,7 @@ function createEnvironment(options = {}) {
   const ids = new Map();
   let overlayHost = null;
   const presets = ["servers", "dm"].flatMap(kind =>
-    ["4", "60"].map(delay => {
+    ["60"].map(delay => {
       const e = fakeElement();
       e.dataset.delay = delay;
       e.dataset.delayFor = kind;
@@ -265,6 +266,7 @@ function createEnvironment(options = {}) {
   return {
     context, window, document, ids, get overlayHost() { return overlayHost; }, presets, localStorage, account,
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
+    emitDelete: id => dispatcher.dispatch({ type: "MESSAGE_DELETE", id }),
     flushTimers, timers, deletions, calls, cached, restURLs, stored, presets, scopeButtons,
     proxyReads, tick: () => interval()
   };
@@ -293,8 +295,8 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-diagnostics").open, true,
     "Diagnostics can be opened after complete minimization");
 
-  // v3.13: full overlay hide, no pill or replacement surface.
-  assert.match(source, /AutoDelete <span class="version">v3\.13<\/span>/);
+  // v3.14: exclusions, logs and observed deletion counts.
+  assert.match(source, /AutoDelete <span class="version">v3\.14<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -307,14 +309,14 @@ function createEnvironment(options = {}) {
     "Header subtitle and '?' help button must be absent");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
     "Footer still exposes diagnostics");
-  assert.match(source, /<span>Requests<\/span>/,
-    "Attempts is relabeled Requests");
+  assert.match(source, /<span>Deleted<\/span>/,
+    "A successful deletion must be observed, not assumed from an attempt");
   assert.match(source, /<span>Errors<\/span>/,
     "Caught is relabeled Errors");
   assert.doesNotMatch(source, /<span>Attempts<\/span>|<span>Caught<\/span>/,
     "Obsolete counter labels are removed");
-  assert.match(source, /Deletion calls attempted; not verified server deletions/,
-    "Requests title preserves precise semantics");
+  assert.match(source, /Deletion events observed after an AutoDelete attempt/,
+    "Deleted title is honest about event observations");
   assert.match(source, /background HTTP failures may not appear/,
     "Errors title explicitly limits what it counts");
   assert.match(source, /backdrop-filter:blur\(28px\) saturate\(165%\)/,
@@ -329,8 +331,11 @@ function createEnvironment(options = {}) {
     "Icons are suppressed in all stat cards");
   assert.match(source, /\.stat strong\{font-size:23px/,
     "Stat numbers are larger and centered without icons");
-  assert.match(source, /<span class="hint">1s–24h<\/span>/,
-    "UI advertises the new 1-second minimum");
+  assert.doesNotMatch(source, /<span class="hint">1s–24h<\/span>/,
+    "Range helper removed per design");
+  assert.doesNotMatch(source, /Your messages only/, "Scope helper removed");
+  assert.match(source, /by Archivarius/, "Author credit");
+  assert.match(source, /id="ad-countdowns"/, "Live countdowns");
   assert.doesNotMatch(source, /<div class="stat[^"]*"[^>]*><(?:svg|img|i)[\s>]/,
     "Stats markup remains icon-free");
   assert.match(source, /\.scope-switch\{[^"\n]*border:1px solid/,
@@ -371,17 +376,17 @@ function createEnvironment(options = {}) {
     "UI order: Enable/Disable → Where to delete → DMs → Servers → Counters");
   const dmBlock = e.ids.get("ad-dm-block");
   const serverBlock = e.ids.get("ad-server-block");
-  assert.match(source, /\.delay\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/,
-    "Delay rows use 3 equal-width CSS grid columns");
+  assert.match(source, /grid-template-columns:minmax\(0,\.9fr\) minmax\(0,1\.4fr\)/,
+    "Delay row reserves more space for exclusions");
   assert.match(source, /\.presets\{display:contents\}/,
     "Preset wrapper does not occupy an extra grid cell");
   for (const kind of ["dm", "servers"]) {
     const renderedPresets = [...source.matchAll(new RegExp('data-delay-for="' + kind + '" data-delay="(\\d+)"', "g"))]
       .map(match => match[1]);
-    assert.deepEqual(renderedPresets, ["4", "60"],
-      kind + " row has only custom / 4s / 60s");
-    assert.equal(e.presets.filter(p => p.dataset.delayFor === kind).length, 2,
-      "Mock and markup expose only two preset buttons for " + kind);
+    assert.deepEqual(renderedPresets, ["60"],
+      kind + " row has custom delay / exclusions / 60s");
+    assert.equal(e.presets.filter(p => p.dataset.delayFor === kind).length, 1,
+      "Mock and markup expose only one preset button for " + kind);
   }
   assert.equal(dmBlock.style.display, "", "Everywhere shows DM timing");
   assert.equal(serverBlock.style.display, "", "Everywhere shows server timing");
@@ -598,11 +603,11 @@ function createEnvironment(options = {}) {
   const settingsStored = JSON.parse(splitDelays.stored.get("discord-autodelete-ui-v2"));
   assert.equal(settingsStored.serverDelay, 30);
   assert.equal(settingsStored.dmDelay, 60);
-  const uiServers = splitDelays.presets.find(p => p.dataset.delayFor === "servers" && p.dataset.delay === "4");
+  const uiServers = splitDelays.presets.find(p => p.dataset.delayFor === "servers" && p.dataset.delay === "60");
   const uiDm = splitDelays.presets.find(p => p.dataset.delayFor === "dm" && p.dataset.delay === "60");
   uiServers.dispatch("click");
   uiDm.dispatch("click");
-  assert.equal(dual.status().serverDelaySeconds, 4, "Server 4s preset only changes server delay");
+  assert.equal(dual.status().serverDelaySeconds, 60, "Server 60s preset only changes server delay");
   assert.equal(dual.status().dmDelaySeconds, 60, "DM 60s preset only changes DM delay");
   dual.pause();
   assert.equal(dual.status().pending, 0);
@@ -614,7 +619,7 @@ function createEnvironment(options = {}) {
   ] });
   vm.runInContext(source, persisted.context, { timeout: 3000 });
   const afterReload = persisted.window.DiscordAutoDelete;
-  assert.equal(afterReload.status().serverDelaySeconds, 4);
+  assert.equal(afterReload.status().serverDelaySeconds, 60);
   assert.equal(afterReload.status().dmDelaySeconds, 60);
   assert.equal(afterReload.running, false, "Never enable by default after reload");
   afterReload.stop();
@@ -816,7 +821,7 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
-  console.log("PASS: v3.13 complete hide/restore without pill, background queue, glass UI and one-second timers");
+  console.log("PASS: v3.14 exclusions, countdown and deletion reporting alongside existing regressions");
 })().catch(err => {
   console.error(err);
   process.exitCode = 1;
