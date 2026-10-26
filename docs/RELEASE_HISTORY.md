@@ -1,6 +1,20 @@
 # AutoDelete — development notes and legacy release history
 
-This file preserves the original long-form README and release notes through v3.14, moved out of the landing page on 26 October 2026. It is historical material: old defaults, labels and limitations may no longer describe the current script. For current usage see [the main README](../README.md).
+This file preserves the original long-form README and release notes through v3.15, moved out of the landing page on 26 October 2026. It is historical material: old defaults, labels and limitations may no longer describe the current script. For current usage see [the main README](../README.md).
+
+---
+
+# Discord AutoDelete v3.15 — draggable compact live-status window
+
+- **Minimize (−)** now swaps the full 392px dashboard for a **250px draggable compact status panel**. Only **Queued**, **Deleted** and **Errors**, plus a tiny **Expand (↗)** control, remain visible.
+- Both the full header and the mini status panel can be dragged using pointer events. The window is clamped to the visible viewport and retains its position as the user expands/minimizes.
+- The status counters update live (including in the compact panel). Enabled/disabled green/blue glass styling carries over; the error state remains visible.
+- **Expand (↗)** or `DiscordAutoDelete.open()` restores the full dashboard. `DiscordAutoDelete.minimize()` enters mini view; `DiscordAutoDelete.hide()` is now an alias for minimize rather than making the host invisible.
+- Minimize/expand never changes enabled state, pending deletion timers, exclusion settings or event subscriptions. **Disable** and **Close** retain their previous cancel/stop behaviors.
+- Browser refresh still removes the script and all timers. Mini-window position is session-only.
+- Added mock regression tests for visibility, dragging, release behavior, restore-control clicks, sync of live counters and background queue continuity.
+
+**Limitations:** Automated tests use mocked Discord internals; they do not verify behavior in a live Discord tab or independently confirm deletion. Discord self-bot automation is unofficial and prohibited.
 
 ---
 
