@@ -137,6 +137,7 @@ function createEnvironment(options = {}) {
       return { id, type: 0, guild_id: "222222222222222222" };
     },
     getChannels() { return {}; },
+    getPrivateChannels() { return options.withPrivateList ? { "777777777777777777": { id: "777777777777777777", type: 1 } } : {}; },
     getDMFromUserId(id) { return id === "111111111111111111" ? "333333333333333333" : null; }
   };
   Object.setPrototypeOf(channels, { constructor: { displayName: "ChannelStore" } });
