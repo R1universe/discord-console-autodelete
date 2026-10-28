@@ -61,6 +61,17 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 
 **Never share your Discord token, cookies or authorization headers.** Do not run unreviewed remote loaders such as `fetch(...).then(eval)`.
 
+## Discord Canary desktop — BetterDiscord plugin (experimental)
+
+For a Discord Canary desktop installation with [BetterDiscord](https://betterdiscord.app/), install the standalone [`AutoDelete.plugin.js`](./AutoDelete.plugin.js). This is a separate packaging of the v3.15 console prototype; the original `autodelete.js` remains available.
+
+1. In BetterDiscord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
+2. Download the plugin from [GitHub](./AutoDelete.plugin.js) using **Download raw file**, and put `AutoDelete.plugin.js` in that folder.
+3. In **BetterDiscord → Plugins**, enable **AutoDelete** and restart Canary if necessary.
+4. The AutoDelete panel will appear automatically when BetterDiscord starts it. Click **Enable** in the panel only when you want monitoring to begin.
+
+**Safety:** it intentionally starts with deletion **disabled** on every fresh launch, and disabling the BetterDiscord plugin stops the monitor and cancels queued deletion attempts. No BDFDB library is needed. The plugin retries initial module discovery, but compatibility with live Discord Canary is **not verified**, and Discord updates can break it. BetterDiscord and user-account automation are unofficial and carry account-risk. See [installation and troubleshooting](./docs/BETTERDISCORD.md).
+
 ### Console controls
 
 ```js
