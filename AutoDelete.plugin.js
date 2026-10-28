@@ -1,8 +1,8 @@
 /**
  * @name AutoDelete
  * @author Archivarius
- * @description Discord AutoDelete v3.21 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
- * @version 3.21.0
+ * @description Discord AutoDelete v3.22 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
+ * @version 3.22.0
  * @source https://github.com/R1universe/discord-console-autodelete/blob/main/AutoDelete.plugin.js
  */
 
@@ -11,7 +11,7 @@
 "use strict";
 
 /*
- * Discord AutoDelete v3.21 — compact UI and bottom-edge log resizing
+ * Discord AutoDelete v3.22 — compact UI and bottom-edge log resizing
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -22,7 +22,7 @@ function launchAutoDelete() {
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.21.0";
+  const VERSION = "3.22.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -69,7 +69,7 @@ function launchAutoDelete() {
     attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), cacheObservedSince: new Map(), enabledSince: 0, nextDeletionAt: 0, monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false,
     telemetry: { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0, ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0,
-      snowflakeRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null }
+      snowflakeRecovered: 0, nonceRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null }
   };
   let ticker = null;
   let hooks = null;
@@ -195,7 +195,7 @@ function launchAutoDelete() {
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.21</span></h1><div class="brand-by">by Archivarius</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.22</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -752,6 +752,24 @@ function launchAutoDelete() {
   }
   // Track provisional self-sends so MESSAGE_UPDATE does not delete old edited history.
   const provisional = new Map();
+  // Direct evidence of this account sending a NEW message is stronger than
+  // discord's optional clock-derived timestamp. Only pair the confirmed ID
+  // with a nonce observed in this session, in the same channel, after Enable.
+  // A bounded snowflake age check prevents accidental deletion of old history.
+  function recentlyConfirmedLocalSend(msg, channelId) {
+    if (msg?.nonce == null) return false;
+    const id = String(msg.id ?? "");
+    const nonce = String(msg.nonce);
+    if (!validId(id) || id === nonce) return false;
+    const observed = provisional.get(channelId + ":" + nonce);
+    const now = Date.now();
+    if (!Number.isFinite(observed) || observed < state.enabledSince ||
+        now - observed > 90000) return false;
+    const serverCreated = snowflakeCreatedAt(id);
+    return Number.isFinite(serverCreated) &&
+      serverCreated >= state.enabledSince - 90000 &&
+      serverCreated <= now + MAX_FUTURE_CLOCK_SKEW_MS;
+  }
   function rememberProvisional(msg, channelId) {
     if (!validId(channelId) || !(msg.nonce != null || validId(msg.id))) return;
     provisional.set(channelId + ":" + String(msg.nonce ?? msg.id), Date.now());
@@ -799,9 +817,15 @@ function launchAutoDelete() {
       rememberProvisional(msg, channelId);
       return;
     }
-    if (!newSinceEnabled(msg, channelId, event?.fromCache === true)) {
+    const fresh = newSinceEnabled(msg, channelId, event?.fromCache === true);
+    if (!fresh && !recentlyConfirmedLocalSend(msg, channelId)) {
       state.telemetry.ageRejected++;
       return;
+    }
+    if (!fresh) {
+      state.telemetry.nonceRecovered++;
+      state.telemetry.lastAgeRejectionReason = "confirmed_local_send";
+      state.telemetry.lastRejectedAgeSeconds = null;
     }
     const id = String(msg.id ?? "");
     if (!validId(id) || !validId(channelId) || state.pending.has(id) || state.processed.has(id)) return;
@@ -820,6 +844,7 @@ function launchAutoDelete() {
     if (state.processed.size > 5000) state.processed.delete(state.processed.values().next().value);
     if (nonceKey) {
       state.processedNonces.add(nonceKey);
+      provisional.delete(nonceKey);
       if (state.processedNonces.size > 5000)
         state.processedNonces.delete(state.processedNonces.values().next().value);
     }
@@ -968,7 +993,7 @@ function launchAutoDelete() {
     state.enabledSince = Date.now();
     state.telemetry = { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0,
       ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0,
-      snowflakeRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null };
+      snowflakeRecovered: 0, nonceRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null };
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();
@@ -1383,6 +1408,7 @@ function launchAutoDelete() {
         confirmedScheduled: state.telemetry.confirmed,
         ageRejected: state.telemetry.ageRejected,
         snowflakeRecovered: state.telemetry.snowflakeRecovered,
+        nonceRecovered: state.telemetry.nonceRecovered,
         lastAgeRejectionReason: state.telemetry.lastAgeRejectionReason,
         lastRejectedAgeSeconds: state.telemetry.lastRejectedAgeSeconds,
         invalidChannel: state.telemetry.invalidChannel,
