@@ -364,9 +364,9 @@ function createEnvironment(options = {}) {
     "Subtle glass effect is applied to the overall panel");
   assert.match(source, /background:radial-gradient/,
     "Panel has quiet ambient futuristic lighting");
-  assert.match(source, /\.panel\.is-active\{[^"\n]*#90ffd1b3/,
+  assert.match(source, /\.panel\.is-active\{[^"\n]*#90ffd18f/,
     "Active glass shell changes to green");
-  assert.match(source, /\.panel\{[^"\n]*#d6e0ff75/,
+  assert.match(source, /\.panel\{[^"\n]*#d6e0ff5e/,
     "Idle glass shell has a cool translucent stroke");
   assert.match(source, /\.stat svg,\.stat img,\.stat i\{display:none!important\}/,
     "Icons are suppressed in all stat cards");
