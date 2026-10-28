@@ -349,7 +349,7 @@ function createEnvironment(options = {}) {
   // A newer paste stops old code; a same-version paste only reopens the window.
   const sameVersion = createEnvironment();
   let sameOpened = 0;
-  sameVersion.window.DiscordAutoDelete = { version: "3.20.0", open() { sameOpened++; } };
+  sameVersion.window.DiscordAutoDelete = { version: "3.21.0", open() { sameOpened++; } };
   vm.runInContext(source, sameVersion.context, { timeout: 3000 });
   assert.equal(sameOpened, 1, "Same version reopens without duplicate instance");
   const oldVersion = createEnvironment();
@@ -361,7 +361,7 @@ function createEnvironment(options = {}) {
   };
   vm.runInContext(source, oldVersion.context, { timeout: 3000 });
   assert.equal(previousStopped, 1, "Old instance is stopped");
-  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.20.0", "New controller version");
+  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.21.0", "New controller version");
   assert.equal(oldVersion.window.DiscordAutoDelete.running, false, "Upgrade starts paused");
   oldVersion.window.DiscordAutoDelete.stop();
 
@@ -407,7 +407,7 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
 
   // v3.15: a draggable minimized status window and retained v3.14 features.
-  assert.match(source, /AutoDelete <span class="version">v3\.20<\/span>/);
+  assert.match(source, /AutoDelete <span class="version">v3\.21<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -1105,8 +1105,20 @@ function createEnvironment(options = {}) {
     timestamp: Math.floor((Date.now() - 3600_000) / 1000),
     author: { id: variants.account.id }, channel_id: "444444444444444444",
     guild_id: "222222222222222222", state: "SENT" });
-  assert.equal(variantsApi.status().pending, timestamps.length,
-    "Hour-old messages remain ineligible even when snowflake is recent");
+  assert.equal(variantsApi.status().pending, timestamps.length + 1,
+    "Recent server snowflake recovers a stale client timestamp");
+  assert.equal(variantsApi.status().snowflakeRecovered, 1,
+    "Recovery is visible in anonymous diagnostics");
+  const oldSnowflake = String((BigInt(Date.now() - 3600_000 - 1420070400000) << 22n) + 100n);
+  variants.emit({ id: oldSnowflake,
+    timestamp: Math.floor((Date.now() - 3600_000) / 1000),
+    author: { id: variants.account.id }, channel_id: "444444444444444444",
+    guild_id: "222222222222222222", state: "SENT" });
+  assert.equal(variantsApi.status().pending, timestamps.length + 1,
+    "Truly old history remains blocked by both timestamps");
+  assert.equal(variantsApi.status().lastAgeRejectionReason, "older_than_enable");
+  assert.ok(variantsApi.status().lastRejectedAgeSeconds >= 3500,
+    "Age rejection explains how old the message is without exposing identifiers");
   variantsApi.stop();
 
   // v3.18-v3.19 regression: the local optimistic SENDING message can
