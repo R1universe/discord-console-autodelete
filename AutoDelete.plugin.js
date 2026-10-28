@@ -45,6 +45,7 @@ function launchAutoDelete() {
     serverDelay: validDelay(saved.serverDelay) ? Number(saved.serverDelay) : legacyDelay,
     dmDelay: validDelay(saved.dmDelay) ? Number(saved.dmDelay) : legacyDelay,
     scope: scopes.has(saved.scope) ? saved.scope : "all",
+    diagnosticsHeight: Number.isFinite(saved.diagnosticsHeight) ? Math.max(100, Math.min(520, Math.round(saved.diagnosticsHeight))) : 170,
     excludedDms: Array.isArray(saved.excludedDms) ? [...new Set(saved.excludedDms.filter(validId).map(String))].slice(0, 300) : [],
     excludedGuilds: Array.isArray(saved.excludedGuilds) ? [...new Set(saved.excludedGuilds.filter(validId).map(String))].slice(0, 300) : []
   };
@@ -99,7 +100,7 @@ function launchAutoDelete() {
     ".preset{display:block;width:100%;min-width:0;border:1px solid #35404a;background:linear-gradient(150deg,#1c222895,#151a20a1);color:#adb7c1;border-radius:9px;padding:11px 0;font-size:11px;line-height:1.2;box-shadow:inset 0 1px 0 #ffffff06}",
     ".preset:hover{background:var(--ad-hover);color:#fff}.preset.selected{background:#6f7cff18;color:#dfe3ff;border-color:#7784ff;box-shadow:inset 0 1px 0 #ffffff07,0 0 0 1px #6f7cff12}",
     ".panel.is-active .preset.selected{background:#35c87814;color:#d4f8e1;border-color:#35c8787e;box-shadow:0 0 12px #35c8780e}",
-    ".scope-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border:1px solid #2b343d;border-radius:12px;background:linear-gradient(160deg,#11161b97,#171b1fa2);box-shadow:inset 0 1px 3px #0005}",
+    ".scope-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;border:1px solid #2b343d;border-radius:12px;background:linear-gradient(160deg,#11161b97,#171b1fa2);box-shadow:inset 0 1px 3px #0005}",
     ".scope-btn{border:1px solid transparent;background:transparent;color:#aeb8c2;border-radius:9px;padding:10px 3px;font-size:11px;font-weight:670;line-height:1.3;white-space:nowrap}",
     ".scope-btn:hover{background:#27303a66;color:#fff}.scope-btn.selected{background:linear-gradient(140deg,#333b60,#242e53);color:#f0f2ff;border-color:#7685ff5e;box-shadow:inset 0 1px 0 #ffffff14,0 3px 12px #0005,0 0 13px #6f7cff10}",
     ".panel.is-active .scope-switch{background:linear-gradient(160deg,#101d16,#17251b);border-color:#2a6345}.panel.is-active .scope-btn.selected{background:linear-gradient(140deg,#28583d,#183b29);color:#e5fff0;border-color:#37b8777d;box-shadow:inset 0 1px 0 #ffffff0f,0 2px 12px #0004,0 0 15px #35c87812}",
@@ -111,7 +112,8 @@ function launchAutoDelete() {
     ".diagnostics{font-size:11px}.diagnostics>summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;color:#bac3cd;cursor:pointer;list-style:none;font-weight:610;user-select:none}",
     ".diagnostics>summary::-webkit-details-marker{display:none}.diagnostics>summary:after{content:'⌄';font-size:17px;line-height:12px;color:#a8b4bd;transform:translateY(-1px)}.diagnostics[open]>summary:after{transform:rotate(180deg)}",
     ".diag-body{padding:2px 0 14px;border-top:1px solid #303944}.diag-title{margin:10px 0 7px;font-size:10px;letter-spacing:.4px;font-weight:700;color:#b2bfca}",
-    ".loglist{max-height:135px;overflow:auto;scrollbar-width:thin;color:#aeb9c1;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
+    ".loglist{height:170px;min-height:100px;max-height:min(60vh,520px);overflow:auto;scrollbar-width:thin;color:#aeb9c1;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
+    ".diag-resizer{height:17px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;user-select:none}.diag-resizer span{display:block;width:52px;height:4px;border-radius:99px;background:#a1b5ba66}.diag-resizer:hover span,.diag-resizer:focus-visible span{background:var(--ad-accent)}",
     ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#87929d;margin-right:5px}.logitem.bad{color:#f1a9af}.logitem.good{color:#94dab6}",
     ".footer button.diag-action{border:1px solid #33404a;background:linear-gradient(140deg,#20272f,#171e25);color:#d8e0e7;border-radius:9px;padding:10px;width:100%;margin-top:12px}.footer button.diag-action:hover{background:#28333b}",
     "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:14px}.head{padding:13px 14px}.footer{padding:0 14px}}",
@@ -151,7 +153,7 @@ function launchAutoDelete() {
     ".picker-title{text-align:center;font-weight:700;font-size:12px;margin:0 0 9px}.picker-note{font-size:10px;color:#c9d1d9;line-height:1.5;margin:6px 0}",
     ".picker-list{max-height:180px;overflow-y:auto;display:grid;gap:4px}.picker-option{display:flex;align-items:center;gap:8px;min-width:0;font-size:11px;padding:7px 6px;border:1px solid #ffffff19;border-radius:9px;overflow-wrap:anywhere}",
     ".picker-option input{accent-color:#35c878;flex:none}.picker-action{padding:9px 12px;margin:4px 0 7px;min-height:36px;width:100%;font-size:11px}",
-    ".picker-input-row{display:flex;gap:7px;margin-top:8px}.picker-input-row input{min-width:0;width:100%;font-size:11px}.picker-input-row button{width:auto;white-space:nowrap;padding:8px 10px}",
+    ".picker-input-row{display:flex;gap:7px;margin-top:8px}.picker-input-row input{min-width:0;width:100%;font-size:11px}.picker-input-row button{width:auto;white-space:nowrap;padding:8px 10px}.picker-search{margin:7px 0 8px;min-height:37px;font-size:12px}",
     /* Minimized, draggable frosted-glass status view. */
     ".mini-panel{position:relative;width:392px;max-width:calc(100vw - 24px);padding:14px 10px 11px;border:1px solid #b3ceff7b;border-radius:18px;background:radial-gradient(ellipse at 80% -20%,#7d9aff2b,transparent 78%),linear-gradient(150deg,#273251bd,#101824be);backdrop-filter:blur(25px) saturate(155%);-webkit-backdrop-filter:blur(25px) saturate(155%);box-shadow:inset 0 1px 0 #ffffff4e,0 12px 32px #0009,0 0 19px #6f7cff20;color:#eef1f4;cursor:grab;touch-action:none;user-select:none}",
     ".mini-panel.is-active{border-color:#9cffe099;background:radial-gradient(ellipse at 85% -25%,#4affe43a,transparent 78%),linear-gradient(155deg,#1c4943be,#0d2524c0);box-shadow:inset 0 1px 0 #ffffff66,0 12px 32px #0009,0 0 20px #40ffb93b}",
@@ -185,25 +187,25 @@ function launchAutoDelete() {
         '<button class="reconnect" id="ad-retry" style="display:none">Retry connection</button>',
         '<div class="field"><div class="fieldrow"><label id="ad-scope-label">Where to delete</label></div>',
           '<div class="scope-switch" role="group" aria-labelledby="ad-scope-label">',
-            '<button type="button" class="scope-btn" data-scope="all" aria-pressed="true">Everywhere</button>',
-            '<button type="button" class="scope-btn" data-scope="servers" aria-pressed="false">Servers</button>',
-            '<button type="button" class="scope-btn" data-scope="dm" aria-pressed="false">DMs</button>',
+            '<button type="button" class="scope-btn" data-scope="servers" aria-pressed="true">Servers</button>',
+            '<button type="button" class="scope-btn" data-scope="dm" aria-pressed="true">DMs</button>',
           '</div></div>',
         '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label></div>',
           '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds">',
-          '<button type="button" class="preset exclude-btn" id="ad-exclude-dm" aria-expanded="false">Excluded DMs ›</button>',
+          '<button type="button" class="preset exclude-btn" id="ad-exclude-dm" aria-expanded="false">Excluded (0) ›</button>',
         '</div></div>',
         '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label></div>',
           '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds">',
-          '<button type="button" class="preset exclude-btn" id="ad-exclude-servers" aria-expanded="false">Excluded Servers ›</button>',
+          '<button type="button" class="preset exclude-btn" id="ad-exclude-servers" aria-expanded="false">Excluded (0) ›</button>',
         '</div></div>',
         '<section class="picker" id="ad-picker" hidden aria-label="Exclusion picker">',
           '<div class="picker-title" id="ad-picker-title"></div>',
           '<div class="picker-note" id="ad-picker-note">Select chats or servers to keep out of automatic deletion. Existing queued timers in excluded locations will be cancelled.</div>',
           '<button type="button" class="preset picker-action" id="ad-exclude-current">Exclude current conversation / server</button>',
+          '<input class="value picker-search" id="ad-exclude-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search username, name or ID" aria-label="Search chats and servers">',
           '<div class="picker-list" id="ad-picker-list"></div>',
           '<div class="picker-input-row"><input class="value" id="ad-exclude-id" inputmode="numeric" type="text" autocomplete="off" placeholder="Channel / server ID" aria-label="ID to exclude"><button type="button" class="preset" id="ad-add-exclude">Add ID</button></div>',
-          '<div class="picker-note">Only identifiers are stored locally. If the list is incomplete, open that chat/server and use Exclude current, or enter its ID.</div>',
+          '<div class="picker-note">Search by name above, or add an existing channel/user ID. Only exclusion IDs are saved.</div>',
         '</section>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
         '<div class="stat" title="Deletion events observed after an AutoDelete attempt; may miss deletion confirmations"><strong id="ad-deleted">0</strong><span>Deleted</span></div></div>',
@@ -212,6 +214,7 @@ function launchAutoDelete() {
       '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
         '<summary>Diagnostics</summary>',
         '<div class="diag-body">',
+          '<div class="diag-resizer" id="ad-diag-resize" role="separator" aria-label="Resize diagnostics log" aria-orientation="horizontal" tabindex="0" title="Drag down to expand the log, or use arrow keys"><span></span></div>',
           '<div class="loglist" id="ad-logs" aria-live="polite"></div>',
           '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
         '</div>',
@@ -332,19 +335,19 @@ function launchAutoDelete() {
     if (!editingDelay.has("dm") && shadow.activeElement !== el("ad-dm-delay"))
       el("ad-dm-delay").value = String(config.dmDelay);
     shadow.querySelectorAll("[data-scope]").forEach(btn => {
-      const selected = btn.dataset.scope === config.scope;
+      const selected = config.scope === "all" || btn.dataset.scope === config.scope;
       btn.classList.toggle("selected", selected);
       btn.setAttribute("aria-pressed", String(selected));
     });
     // Scope controls which timing fields are relevant. The hidden category's
     // value remains saved and is restored unchanged if the user selects it.
     // Existing queued jobs keep their original deadlines.
-    el("ad-dm-block").style.display = config.scope === "servers" ? "none" : "";
-    el("ad-server-block").style.display = config.scope === "dm" ? "none" : "";
+    el("ad-dm-block").style.display = "";
+    el("ad-server-block").style.display = "";
     el("ad-pending").textContent = state.pending.size;
     el("ad-deleted").textContent = state.deleted;
-    el("ad-exclude-dm").textContent = "Excluded DMs (" + config.excludedDms.length + ") ›";
-    el("ad-exclude-servers").textContent = "Excluded Servers (" + config.excludedGuilds.length + ") ›";
+    el("ad-exclude-dm").textContent = "Excluded (" + config.excludedDms.length + ") ›";
+    el("ad-exclude-servers").textContent = "Excluded (" + config.excludedGuilds.length + ") ›";
     el("ad-exclude-dm").setAttribute("aria-expanded", String(pickerKind === "dm"));
     el("ad-exclude-servers").setAttribute("aria-expanded", String(pickerKind === "servers"));
     renderInlineTimers();
@@ -552,6 +555,10 @@ function launchAutoDelete() {
     const channel = pick(matches(x => typeof x?.getChannel === "function" &&
       (typeof x?.getDMFromUserId === "function" || typeof x?.getChannels === "function")),
       storeNamed("ChannelStore"), "ChannelStore", notes);
+    const privateChannelStore = pick(matches(x => typeof x?.getPrivateChannelIds === "function" ||
+      typeof x?.getSortedPrivateChannels === "function"),
+      x => storeNamed("PrivateChannelSortStore")(x) || storeNamed("PrivateChannelStore")(x),
+      "PrivateChannelStore", notes);
 
     // Keep legacy event discovery, but do not mistake a list of candidates
     // for proof that the real Discord gateway is connected.
@@ -572,7 +579,7 @@ function launchAutoDelete() {
         (dispatchers.length || (store && selected))) {
       return {
         users, actions, rest, messageStore: store, selectedChannel: selected,
-        channelStore: channel, guildStore, dispatchers, accountId, moduleCount: all.length, ignoredProxies: lookupStats.ignored,
+        channelStore: channel, guildStore, privateChannelStore, dispatchers, accountId, moduleCount: all.length, ignoredProxies: lookupStats.ignored,
         discovery: notes
       };
     }
@@ -830,74 +837,111 @@ function launchAutoDelete() {
     notify((selected ? "Excluded " : "Restored ") + (kind === "dm" ? "DM channel" : "server") + " from auto-delete.");
     return config[key].length;
   }
+  // Use the list of opened private channels, never the broad historical channel cache.
+  function currentOpenChannelId() {
+    const path = String(location.pathname ?? "");
+    const match = path.match(/^\/channels\/@me\/(\d{15,22})(?:\/|$)/);
+    if (match) return match[1];
+    if (path === "/channels/@me" || path === "/channels/@me/") return "";
+    return String(hooks?.selectedChannel?.getChannelId?.() ?? "");
+  }
+  function resolveDmId(value) {
+    const id = String(value ?? "");
+    if (!validId(id)) return "";
+    const channel = hooks?.channelStore?.getChannel?.(id);
+    if (channel?.type === 1 || channel?.type === 3) return id;
+    const result = hooks?.channelStore?.getDMFromUserId?.(id);
+    const channelId = String(typeof result === "string" ? result : result?.id ?? "");
+    const dm = hooks?.channelStore?.getChannel?.(channelId);
+    return validId(channelId) && (dm?.type === 1 || dm?.type === 3) ? channelId : "";
+  }
   function getChoices(kind) {
-    const found = new Map();
-    let scanned = 0; // A large Discord module tree must not freeze the picker.
-    const add = (id, name) => {
+    const choices = new Map();
+    const add = (id, title) => {
+      id = String(id ?? "");
       if (!validId(id)) return;
-      const key = String(id);
-      if (!found.has(key)) found.set(key, String(name || (kind === "dm" ? "DM" : "Server") + " · " + key.slice(-5)).slice(0, 90));
+      const name = String(title ?? "").trim().slice(0, 120);
+      if (!choices.has(id) || (name && choices.get(id).startsWith("Unknown ")))
+        choices.set(id, name || "Unknown " + (kind === "dm" ? "DM" : "server") + " · " + id.slice(-6));
     };
-    const visit = (value, depth = 0) => {
-      if (!value || typeof value !== "object" || depth > 3 || found.size >= 300 || ++scanned > 2000) return;
-      if (Array.isArray(value)) { value.slice(0, 350).forEach(v => visit(v, depth + 1)); return; }
-      const id = value.id;
-      if (kind === "dm" && (value.type === 1 || value.type === 3) && validId(id)) {
-        const recipients = value.recipients ?? value.recipientIds ?? [];
-        let title = value.name;
-        if (!title && Array.isArray(recipients)) {
-          const names = recipients.map(u => typeof u === "string" ? hooks?.users?.getUser?.(u)?.username : u?.username).filter(Boolean);
-          if (names.length) title = names.join(", ");
-        }
-        add(id, title);
-        return;
+    if (kind === "servers") {
+      const guilds = hooks?.guildStore?.getGuilds?.() ?? {};
+      for (const guild of (Array.isArray(guilds) ? guilds : Object.values(guilds)).slice(0, 400)) {
+        if (validId(guild?.id)) add(guild.id, guild.name);
       }
-      if (kind === "servers" && validId(id) && typeof value.name === "string" &&
-          (value.ownerId != null || value.owner_id != null || value.roles != null || value.afk_channel_id !== undefined)) {
-        add(id, value.name);
-        return;
-      }
-      if (depth >= 3) return;
-      try { for (const child of Object.values(value).slice(0, 350)) visit(child, depth + 1); } catch {}
-    };
-    if (kind === "dm") {
-      for (const method of ["getPrivateChannels", "getSortedPrivateChannels", "getChannels"]) {
-        try { visit(hooks?.channelStore?.[method]?.()); } catch {}
-      }
+      const channel = hooks?.channelStore?.getChannel?.(currentOpenChannelId());
+      const guildId = String(channel?.guild_id ?? channel?.guildId ?? "");
+      if (validId(guildId)) add(guildId, hooks?.guildStore?.getGuild?.(guildId)?.name);
     } else {
-      try { visit(hooks?.guildStore?.getGuilds?.()); } catch {}
-      try { visit(hooks?.channelStore?.getChannels?.()); } catch {}
+      const sidebar = new Map();
+      for (const link of document.querySelectorAll?.('a[href^="/channels/@me/"]') ?? []) {
+        const m = String(link.getAttribute?.("href") ?? "").match(/^\/channels\/@me\/(\d{15,22})(?:\/|$)/);
+        if (m) sidebar.set(m[1], String(link.getAttribute?.("aria-label") ?? "").trim());
+      }
+      const ids = new Set(sidebar.keys());
+      const collect = data => {
+        if (!data) return;
+        const addId = item => {
+          const id = String(typeof item === "string" ? item : item?.channelId ?? item?.id ?? "");
+          if (validId(id)) ids.add(id);
+        };
+        if (Array.isArray(data)) data.slice(0, 500).forEach(addId);
+        else if (typeof data === "object") for (const [key, item] of Object.entries(data).slice(0, 500)) {
+          if (validId(key)) ids.add(key);
+          addId(item);
+        }
+      };
+      for (const store of [hooks?.privateChannelStore, hooks?.channelStore])
+        for (const method of ["getPrivateChannelIds", "getSortedPrivateChannels", "getPrivateChannels"]) {
+          try { collect(store?.[method]?.()); } catch {}
+        }
+      const current = currentOpenChannelId();
+      if (validId(current)) ids.add(current);
+      for (const id of ids) {
+        const channel = hooks?.channelStore?.getChannel?.(id);
+        if (channel?.type !== 1 && channel?.type !== 3) continue;
+        const recipients = channel.recipients ?? channel.recipientIds ?? [];
+        const people = (Array.isArray(recipients) ? recipients : []).map(person => {
+          const uid = String(typeof person === "string" ? person : person?.id ?? "");
+          const user = (validId(uid) ? hooks?.users?.getUser?.(uid) : null) ||
+            (typeof person === "object" ? person : null);
+          if (!user) return "";
+          const display = String(user.globalName ?? user.global_name ?? user.username ?? "").trim();
+          const username = String(user.username ?? "").trim();
+          return display && username && display.toLowerCase() !== username.toLowerCase() ?
+            display + " (@" + username + ")" : display || (username ? "@" + username : "");
+        }).filter(Boolean);
+        add(id, (channel.type === 3 ? (channel.name || people.join(", ")) :
+          (people[0] || channel.name)) || sidebar.get(id));
+      }
     }
-    const current = String(hooks?.selectedChannel?.getChannelId?.() ?? "");
-    const channel = hooks?.channelStore?.getChannel?.(current);
-    if (kind === "dm" && (channel?.type === 1 || channel?.type === 3)) add(current, channel.name ?? "Current DM · " + current.slice(-5));
-    if (kind === "servers" && validId(channel?.guild_id ?? channel?.guildId))
-      add(channel.guild_id ?? channel.guildId, hooks?.guildStore?.getGuild?.(channel.guild_id ?? channel.guildId)?.name ?? "Current server");
-    return [...found.entries()].sort((a,b) => a[1].localeCompare(b[1])).slice(0, 200);
+    for (const id of kind === "dm" ? config.excludedDms : config.excludedGuilds)
+      if (!choices.has(id)) add(id, "Saved ID · " + id.slice(-6));
+    return [...choices.entries()].sort((a,b) => a[1].localeCompare(b[1])).slice(0, 400);
   }
   function renderPicker() {
     const panel = el("ad-picker");
     panel.hidden = !pickerKind;
     panel.style.display = pickerKind ? "" : "none";
     if (!pickerKind) return;
-    const kind = pickerKind;
+    const kind = pickerKind, key = kind === "dm" ? "excludedDms" : "excludedGuilds";
     el("ad-picker-title").textContent = kind === "dm" ? "DMs to keep" : "Servers to keep";
-    el("ad-exclude-id").value = "";
     const list = el("ad-picker-list");
     list.replaceChildren();
-    const key = kind === "dm" ? "excludedDms" : "excludedGuilds";
-    const choices = getChoices(kind);
-    for (const id of config[key]) if (!choices.some(([choice]) => choice === id))
-      choices.push([id, "Saved ID · " + id.slice(-5)]);
-    if (!choices.length) {
+    const query = String(el("ad-exclude-search").value ?? "").trim().toLocaleLowerCase();
+    const matches = getChoices(kind).filter(([id,name]) =>
+      !query || name.toLocaleLowerCase().includes(query) || id.includes(query));
+    if (!matches.length) {
       const empty = document.createElement("div");
       empty.className = "picker-note";
-      empty.textContent = "No locations available to list. Open a conversation/server or enter an ID below.";
+      empty.textContent = query ? "No matches." :
+        "No opened chats found. Open a chat, or enter a channel/user ID below.";
       list.appendChild(empty);
     }
-    for (const [id, name] of choices) {
+    for (const [id, name] of matches) {
       const row = document.createElement("label");
       row.className = "picker-option";
+      row.title = "Channel / server ID: " + id;
       const input = document.createElement("input");
       input.type = "checkbox";
       input.checked = config[key].includes(id);
@@ -907,32 +951,50 @@ function launchAutoDelete() {
       row.append(input, title);
       list.appendChild(row);
     }
-    const current = String(hooks?.selectedChannel?.getChannelId?.() ?? "");
+    const current = currentOpenChannelId();
     const channel = hooks?.channelStore?.getChannel?.(current);
-    const possible = kind === "dm" ? (channel?.type === 1 || channel?.type === 3) :
+    const canExclude = kind === "dm" ? (channel?.type === 1 || channel?.type === 3) :
       validId(channel?.guild_id ?? channel?.guildId);
-    el("ad-exclude-current").disabled = !possible;
+    el("ad-exclude-current").disabled = !canExclude;
     el("ad-exclude-current").textContent = kind === "dm" ? "Exclude currently open DM" : "Exclude currently open server";
   }
   function togglePicker(kind) {
     pickerKind = pickerKind === kind ? null : kind;
+    el("ad-exclude-search").value = "";
+    el("ad-exclude-id").value = "";
     renderPicker(); render();
   }
+  // Stop propagation of Discord shortcuts, not normal Backspace editing.
+  for (const id of ["ad-exclude-search", "ad-exclude-id"]) {
+    const input = el(id);
+    for (const type of ["keydown", "keyup", "keypress"]) input.addEventListener(type, event => {
+      event.stopPropagation?.();
+      if (type === "keydown" && event.key === "Enter" && id === "ad-exclude-id") {
+        event.preventDefault?.();
+        el("ad-add-exclude").click();
+      }
+    });
+  }
+  el("ad-exclude-search").addEventListener("input", renderPicker);
   el("ad-exclude-dm").addEventListener("click", () => togglePicker("dm"));
   el("ad-exclude-servers").addEventListener("click", () => togglePicker("servers"));
   el("ad-exclude-current").addEventListener("click", () => {
     if (!pickerKind) return;
-    const channelId = String(hooks?.selectedChannel?.getChannelId?.() ?? "");
-    const channel = hooks?.channelStore?.getChannel?.(channelId);
-    if (pickerKind === "dm" && (channel?.type === 1 || channel?.type === 3))
-      exclude("dm", channelId);
+    const id = currentOpenChannelId(), channel = hooks?.channelStore?.getChannel?.(id);
+    if (pickerKind === "dm" && (channel?.type === 1 || channel?.type === 3)) exclude("dm", id);
     else if (pickerKind === "servers" && validId(channel?.guild_id ?? channel?.guildId))
       exclude("servers", channel.guild_id ?? channel.guildId);
   });
   el("ad-add-exclude").addEventListener("click", () => {
     if (!pickerKind) return;
-    try { exclude(pickerKind, el("ad-exclude-id").value.trim()); }
-    catch (e) { notify(String(e.message), "bad"); }
+    const raw = String(el("ad-exclude-id").value ?? "").trim();
+    const id = pickerKind === "dm" ? resolveDmId(raw) : raw;
+    if (pickerKind === "dm" && !id) {
+      notify("Enter an existing DM channel ID or DM recipient user ID.", "bad");
+      return;
+    }
+    try { exclude(pickerKind, id); el("ad-exclude-id").value = ""; }
+    catch (err) { notify(String(err.message), "bad"); }
   });
   function setServerDelay(seconds) { return updateDelay("servers", seconds); }
   function setDmDelay(seconds) { return updateDelay("dm", seconds); }
@@ -952,6 +1014,13 @@ function launchAutoDelete() {
     render();
     notify("Scope changed: " + value + " (new messages only).");
     return value;
+  }
+  function toggleScope(kind) {
+    const servers = config.scope !== "dm", dm = config.scope !== "servers";
+    const nextServers = kind === "servers" ? !servers : servers;
+    const nextDm = kind === "dm" ? !dm : dm;
+    if (!nextServers && !nextDm) return config.scope;
+    return setScope(nextServers && nextDm ? "all" : nextServers ? "servers" : "dm");
   }
 
   el("ad-toggle").addEventListener("click", () => state.enabled ? pause() : resume());
@@ -1004,7 +1073,7 @@ function launchAutoDelete() {
   bindDelayInput("dm", "ad-dm-delay");
   bindDelayInput("servers", "ad-server-delay");
   shadow.querySelectorAll("[data-scope]").forEach(btn =>
-    btn.addEventListener("click", () => setScope(btn.dataset.scope)));
+    btn.addEventListener("click", () => toggleScope(btn.dataset.scope)));
   // Switching views never stops monitoring or cancels any timer.
   function clampPosition() {
     if (!host.style.left || host.style.left === "auto") return;
@@ -1033,6 +1102,35 @@ function launchAutoDelete() {
   }
   el("ad-min").addEventListener("click", minimizePanel);
   el("ad-restore").addEventListener("click", showPanel);
+
+  // Drag the handle down to expand Diagnostics without changing deletion behavior.
+  let diagnosticsResize = null;
+  const resizeHandle = el("ad-diag-resize"), logView = el("ad-logs");
+  logView.style.height = config.diagnosticsHeight + "px";
+  resizeHandle.addEventListener("pointerdown", event => {
+    if (event.button != null && event.button !== 0) return;
+    diagnosticsResize = { y: event.clientY, height: config.diagnosticsHeight };
+    event.preventDefault?.();
+    event.stopPropagation?.();
+  });
+  const resizeTo = value => {
+    config.diagnosticsHeight = Math.max(100, Math.min(520, Math.round(value)));
+    logView.style.height = config.diagnosticsHeight + "px";
+  };
+  const onDiagnosticsMove = event => {
+    if (diagnosticsResize) resizeTo(diagnosticsResize.height + (event.clientY - diagnosticsResize.y) / 0.88);
+  };
+  const endDiagnosticsResize = () => { if (diagnosticsResize) { diagnosticsResize = null; save(); } };
+  resizeHandle.addEventListener("keydown", event => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    resizeTo(config.diagnosticsHeight + (event.key === "ArrowDown" ? 24 : -24));
+    save();
+  });
+  document.addEventListener("pointermove", onDiagnosticsMove);
+  document.addEventListener("pointerup", endDiagnosticsResize);
+  document.addEventListener("pointercancel", endDiagnosticsResize);
 
   // Main header and compact status view both act as drag handles.
   // Pointerdown on the restore/minimize/close buttons must not start dragging.
@@ -1068,6 +1166,9 @@ function launchAutoDelete() {
     document.removeEventListener("pointermove", onMove);
     document.removeEventListener("pointerup", onUp);
     document.removeEventListener("pointercancel", onUp);
+    document.removeEventListener("pointermove", onDiagnosticsMove);
+    document.removeEventListener("pointerup", endDiagnosticsResize);
+    document.removeEventListener("pointercancel", endDiagnosticsResize);
     host.remove();
     try { delete window[NAME]; } catch { window[NAME] = undefined; }
     console.info("[AutoDelete] Stopped. Dashboard removed.");
