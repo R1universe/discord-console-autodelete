@@ -12,7 +12,7 @@
   <img src="assets/autodelete-active.webp" alt="Previous AutoDelete v3.13 interface, before the v3.14 exclusion picker and Deleted counter" width="350">
 </p>
 
-<p align="center"><sub>Previous v3.13 interface · v3.18 adds a narrower aligned layout and bottom-edge Diagnostics resizing alongside paced burst deletion, independent scope switches and a draggable compact status view; current builds show inline message countdowns</sub></p>
+<p align="center"><sub>Previous v3.13 interface · v3.19 adds a narrower aligned layout and bottom-edge Diagnostics resizing alongside paced burst deletion, independent scope switches and a draggable compact status view; current builds show inline message countdowns</sub></p>
 
 > [!WARNING]
 > **Experimental, unofficial Discord self-bot automation.** Discord prohibits automating regular user accounts; using this script can result in account restrictions or termination. The tool does **not guarantee** that a message will disappear at the requested time, or that it was not read, copied, saved or logged beforehand. Not affiliated with Discord.
@@ -69,7 +69,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 
 ## Discord Canary desktop — BetterDiscord plugin (experimental)
 
-For a Discord Canary desktop installation with [BetterDiscord](https://betterdiscord.app/), install the standalone [`AutoDelete.plugin.js`](./AutoDelete.plugin.js). This is a separate packaging of the v3.18 console prototype; the original `autodelete.js` remains available.
+For a Discord Canary desktop installation with [BetterDiscord](https://betterdiscord.app/), install the standalone [`AutoDelete.plugin.js`](./AutoDelete.plugin.js). This is a separate packaging of the v3.19 console prototype; the original `autodelete.js` remains available.
 
 1. In BetterDiscord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
 2. Download the plugin from [GitHub](./AutoDelete.plugin.js) using **Download raw file**, and put `AutoDelete.plugin.js` in that folder.
@@ -126,7 +126,7 @@ Caught errors are reported in the **Diagnostics** activity log and remain availa
 
 ## Project status
 
-**v3.18 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
+**v3.19 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
 
 - [Source code](./autodelete.js)
 - [Manual QA test plan](./QA_TEST_PLAN.md)
@@ -152,3 +152,5 @@ node test/test.js
 CI runs `node scripts/build.js --check` and refuses to pass if `autodelete.js` or `AutoDelete.plugin.js` differs from the shared source. **Do not edit generated distributions manually.** No external dependencies are required to build, and the shipped console file remains copy-pasteable.
 
 **History safety:** AutoDelete must schedule only recently created own messages observed after Enable, never messages loaded when entering an old channel or while backfilling history. Unknown creation timestamps are skipped rather than guessed. Test in an empty/disposable channel before using it elsewhere.
+
+**v3.19 timestamp compatibility:** outgoing messages may carry Unix seconds, milliseconds, ISO timestamps, Date/Moment-like objects, or only their Discord snowflake ID. The scheduler now recognizes these forms while continuing to reject messages created before Enable.
