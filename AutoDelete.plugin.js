@@ -94,16 +94,16 @@ function launchAutoDelete() {
     ".panel.is-active .primary:hover:not(:disabled){background:linear-gradient(135deg,#2cad6a,#1b8353)}",
     ".reconnect{width:100%;border:1px solid #3c4650;background:#1d2329;padding:9px;border-radius:9px;color:#d9e0e6;margin:0 0 12px}",
     ".field{margin-bottom:15px}.fieldrow{margin-bottom:8px}label{font-weight:660;font-size:12px;color:#e4e9ec}.hint{font-size:10px;color:var(--ad-dim)}",
-    ".delay{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;align-items:stretch}.value{display:block;width:100%;min-width:0;padding:11px 12px;border:1px solid #364049;background:linear-gradient(140deg,#1a1f25bd,#15191ec2);color:var(--ad-text);border-radius:9px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 #ffffff08}",
+    ".delay{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;align-items:stretch}.value{display:block;width:100%;min-width:0;padding:11px 12px;border:1px solid #364049;background:linear-gradient(140deg,#1a1f25bd,#15191ec2);color:var(--ad-text);border-radius:9px;outline:none;line-height:1.2;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 #ffffff08}",
     ".value:focus{border-color:var(--ad-accent);box-shadow:0 0 0 2px var(--ad-ring)}",
-    ".presets{display:contents}.preset{display:block;width:100%;min-width:0;border:1px solid #35404a;background:linear-gradient(150deg,#1c222895,#151a20a1);color:#adb7c1;border-radius:9px;padding:11px 0;font-size:11px;line-height:1.2;box-shadow:inset 0 1px 0 #ffffff06}",
+    ".preset{display:block;width:100%;min-width:0;border:1px solid #35404a;background:linear-gradient(150deg,#1c222895,#151a20a1);color:#adb7c1;border-radius:9px;padding:11px 0;font-size:11px;line-height:1.2;box-shadow:inset 0 1px 0 #ffffff06}",
     ".preset:hover{background:var(--ad-hover);color:#fff}.preset.selected{background:#6f7cff18;color:#dfe3ff;border-color:#7784ff;box-shadow:inset 0 1px 0 #ffffff07,0 0 0 1px #6f7cff12}",
     ".panel.is-active .preset.selected{background:#35c87814;color:#d4f8e1;border-color:#35c8787e;box-shadow:0 0 12px #35c8780e}",
     ".scope-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;border:1px solid #2b343d;border-radius:12px;background:linear-gradient(160deg,#11161b97,#171b1fa2);box-shadow:inset 0 1px 3px #0005}",
     ".scope-btn{border:1px solid transparent;background:transparent;color:#aeb8c2;border-radius:9px;padding:10px 3px;font-size:11px;font-weight:670;line-height:1.3;white-space:nowrap}",
     ".scope-btn:hover{background:#27303a66;color:#fff}.scope-btn.selected{background:linear-gradient(140deg,#333b60,#242e53);color:#f0f2ff;border-color:#7685ff5e;box-shadow:inset 0 1px 0 #ffffff14,0 3px 12px #0005,0 0 13px #6f7cff10}",
     ".panel.is-active .scope-switch{background:linear-gradient(160deg,#101d16,#17251b);border-color:#2a6345}.panel.is-active .scope-btn.selected{background:linear-gradient(140deg,#28583d,#183b29);color:#e5fff0;border-color:#37b8777d;box-shadow:inset 0 1px 0 #ffffff0f,0 2px 12px #0004,0 0 15px #35c87812}",
-    ".statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:14px}",
+    ".statrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:14px}",
     ".stat{background:linear-gradient(150deg,#1b2026a1,#12171ca1);border:1px solid #303944;padding:11px 5px;border-radius:11px;text-align:center;box-shadow:inset 0 1px 0 #ffffff08}",
     ".panel.is-active .stat{background:linear-gradient(150deg,#1b30249f,#101b15ae);border-color:#2e5d42}",
     ".stat strong{display:block;font-size:20px;line-height:1.15;letter-spacing:-.5px;color:#f3f6f8;font-variant-numeric:tabular-nums}.stat span{display:block;margin-top:6px;font-size:10px;font-weight:500;color:var(--ad-muted)}",
@@ -146,7 +146,7 @@ function launchAutoDelete() {
     ".diagnostics>summary{padding:14px 1px;color:#e3e9fa;font-weight:650}.diagnostics>summary:after{color:#e9eeff}",
     ".footer button.diag-action{border-radius:13px;border-color:#b3c8ff5e;background:linear-gradient(140deg,#bac9ff29,#283c6266);box-shadow:inset 0 1px 0 #fff4}",
     ".fieldrow{justify-content:center;text-align:center}.fieldrow label{text-align:center}.brand-by{font-size:10px;color:var(--ad-muted);margin-top:3px;font-weight:500}",
-    ".delay{grid-template-columns:minmax(0,.9fr) minmax(0,1.4fr) minmax(0,.9fr)}.exclude-btn{font-size:10px;line-height:1.3;padding:10px 3px;white-space:normal;overflow-wrap:anywhere}",
+    ".delay{grid-template-columns:repeat(2,minmax(0,1fr))}.exclude-btn{font-size:10px;line-height:1.3;padding:10px 3px;white-space:normal;overflow-wrap:anywhere}",
     ".picker{border:1px solid var(--ad-border);border-radius:14px;background:linear-gradient(145deg,#192d2bb2,#0b191cba);padding:12px;margin:2px 0 16px;box-shadow:inset 0 1px 0 #ffffff13}.picker[hidden]{display:none}",
     ".picker-title{text-align:center;font-weight:700;font-size:12px;margin:0 0 9px}.picker-note{font-size:10px;color:#c9d1d9;line-height:1.5;margin:6px 0}",
     ".picker-list{max-height:180px;overflow-y:auto;display:grid;gap:4px}.picker-option{display:flex;align-items:center;gap:8px;min-width:0;font-size:11px;padding:7px 6px;border:1px solid #ffffff19;border-radius:9px;overflow-wrap:anywhere}",
@@ -156,7 +156,7 @@ function launchAutoDelete() {
     ".mini-panel{position:relative;width:392px;max-width:calc(100vw - 24px);padding:14px 10px 11px;border:1px solid #b3ceff7b;border-radius:18px;background:radial-gradient(ellipse at 80% -20%,#7d9aff2b,transparent 78%),linear-gradient(150deg,#273251bd,#101824be);backdrop-filter:blur(25px) saturate(155%);-webkit-backdrop-filter:blur(25px) saturate(155%);box-shadow:inset 0 1px 0 #ffffff4e,0 12px 32px #0009,0 0 19px #6f7cff20;color:#eef1f4;cursor:grab;touch-action:none;user-select:none}",
     ".mini-panel.is-active{border-color:#9cffe099;background:radial-gradient(ellipse at 85% -25%,#4affe43a,transparent 78%),linear-gradient(155deg,#1c4943be,#0d2524c0);box-shadow:inset 0 1px 0 #ffffff66,0 12px 32px #0009,0 0 20px #40ffb93b}",
     ".mini-panel.is-error{border-color:#f2a8b7}.mini-panel:active{cursor:grabbing}",
-    ".mini-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-right:10px}",
+    ".mini-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-right:26px}",
     ".mini-stat{min-width:0;text-align:center;border-radius:10px;border:1px solid #e5ebff2b;background:#ffffff0e;padding:8px 2px 7px;display:flex;flex-direction:column;gap:3px;align-items:center}",
     ".mini-panel.is-active .mini-stat{border-color:#baffdb37;background:#72ffd414}",
     ".mini-stat strong{font-size:18px;line-height:1.1;color:#f7fffa;font-variant-numeric:tabular-nums}.mini-stat span{font-size:9px;color:#d7e4e8;font-weight:600;letter-spacing:-.1px}",
@@ -190,13 +190,13 @@ function launchAutoDelete() {
             '<button type="button" class="scope-btn" data-scope="dm" aria-pressed="false">DMs</button>',
           '</div></div>',
         '<div class="field" id="ad-dm-block"><div class="fieldrow"><label for="ad-dm-delay">DMs · deletion delay</label></div>',
-          '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds"><div class="presets">',
-          '<button type="button" class="preset exclude-btn" id="ad-exclude-dm" aria-expanded="false">Excluded DMs ›</button><button class="preset" data-delay-for="dm" data-delay="60">60s</button>',
-        '</div></div></div>',
+          '<div class="delay"><input class="value" id="ad-dm-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="DM deletion delay in seconds">',
+          '<button type="button" class="preset exclude-btn" id="ad-exclude-dm" aria-expanded="false">Excluded DMs ›</button>',
+        '</div></div>',
         '<div class="field" id="ad-server-block"><div class="fieldrow"><label for="ad-server-delay">Servers · deletion delay</label></div>',
-          '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds"><div class="presets">',
-          '<button type="button" class="preset exclude-btn" id="ad-exclude-servers" aria-expanded="false">Excluded Servers ›</button><button class="preset" data-delay-for="servers" data-delay="60">60s</button>',
-        '</div></div></div>',
+          '<div class="delay"><input class="value" id="ad-server-delay" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" spellcheck="false" title="Type seconds, then press Enter or click outside to save" aria-label="Server deletion delay in seconds">',
+          '<button type="button" class="preset exclude-btn" id="ad-exclude-servers" aria-expanded="false">Excluded Servers ›</button>',
+        '</div></div>',
         '<section class="picker" id="ad-picker" hidden aria-label="Exclusion picker">',
           '<div class="picker-title" id="ad-picker-title"></div>',
           '<div class="picker-note" id="ad-picker-note">Select chats or servers to keep out of automatic deletion. Existing queued timers in excluded locations will be cancelled.</div>',
@@ -206,8 +206,8 @@ function launchAutoDelete() {
           '<div class="picker-note">Only identifiers are stored locally. If the list is incomplete, open that chat/server and use Exclude current, or enter its ID.</div>',
         '</section>',
         '<div class="statrow"><div class="stat"><strong id="ad-pending">0</strong><span>Queued</span></div>',
-        '<div class="stat" title="Deletion events observed after an AutoDelete attempt; may miss deletion confirmations"><strong id="ad-deleted">0</strong><span>Deleted</span></div>',
-        '<div class="stat" title="Errors caught by this script; background HTTP failures may not appear"><strong id="ad-failed">0</strong><span>Errors</span></div></div>',
+        '<div class="stat" title="Deletion events observed after an AutoDelete attempt; may miss deletion confirmations"><strong id="ad-deleted">0</strong><span>Deleted</span></div></div>',
+
       '</div>',
       '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
         '<summary>Diagnostics</summary>',
@@ -222,7 +222,6 @@ function launchAutoDelete() {
       '<div class="mini-stats">',
         '<div class="mini-stat"><strong id="ad-mini-queued">0</strong><span>Queued</span></div>',
         '<div class="mini-stat" title="Observed deletion events, not guaranteed server confirmations"><strong id="ad-mini-deleted">0</strong><span>Deleted</span></div>',
-        '<div class="mini-stat" title="Caught errors; background failures may not appear"><strong id="ad-mini-errors">0</strong><span>Errors</span></div>',
       '</div>',
     '</aside>'
   ].join("");
@@ -236,7 +235,7 @@ function launchAutoDelete() {
     const list = el("ad-logs");
     if (list) {
       list.replaceChildren();
-      state.recent.slice(0, 6).forEach(item => {
+      state.recent.slice(0, 18).forEach(item => {
         const line = document.createElement("div");
         line.className = "logitem " + item.tone;
         const date = document.createElement("span");
@@ -342,10 +341,6 @@ function launchAutoDelete() {
     // Existing queued jobs keep their original deadlines.
     el("ad-dm-block").style.display = config.scope === "servers" ? "none" : "";
     el("ad-server-block").style.display = config.scope === "dm" ? "none" : "";
-    shadow.querySelectorAll("[data-delay-for]").forEach(btn => {
-      const seconds = btn.dataset.delayFor === "servers" ? config.serverDelay : config.dmDelay;
-      btn.classList.toggle("selected", Number(btn.dataset.delay) === seconds);
-    });
     el("ad-pending").textContent = state.pending.size;
     el("ad-deleted").textContent = state.deleted;
     el("ad-exclude-dm").textContent = "Excluded DMs (" + config.excludedDms.length + ") ›";
@@ -353,10 +348,8 @@ function launchAutoDelete() {
     el("ad-exclude-dm").setAttribute("aria-expanded", String(pickerKind === "dm"));
     el("ad-exclude-servers").setAttribute("aria-expanded", String(pickerKind === "servers"));
     renderInlineTimers();
-    el("ad-failed").textContent = state.failed;
     el("ad-mini-queued").textContent = state.pending.size;
     el("ad-mini-deleted").textContent = state.deleted;
-    el("ad-mini-errors").textContent = state.failed;
 
   }
 
@@ -1010,8 +1003,6 @@ function launchAutoDelete() {
   }
   bindDelayInput("dm", "ad-dm-delay");
   bindDelayInput("servers", "ad-server-delay");
-  shadow.querySelectorAll("[data-delay-for]").forEach(btn =>
-    btn.addEventListener("click", () => updateDelay(btn.dataset.delayFor, Number(btn.dataset.delay))));
   shadow.querySelectorAll("[data-scope]").forEach(btn =>
     btn.addEventListener("click", () => setScope(btn.dataset.scope)));
   // Switching views never stops monitoring or cancels any timer.

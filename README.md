@@ -42,13 +42,13 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 ## Features
 
 - **Live self-destruct timer:** automatically queue an attempted deletion for each detected, newly sent message by your account.
-- **Separate DM and server delays:** any whole number from **1 to 86,400 seconds (24 hours)**, with a **60s** preset and one-click per-category exclusion picker.
+- **Separate DM and server delays:** any whole number from **1 to 86,400 seconds (24 hours)**, with manual per-category entry and an exclusion picker; no fixed-delay presets.
 - **Choose where:** **Everywhere / Servers / DMs** (including group DMs when channel classification is available). **Excluded DMs / Excluded Servers** let you protect specific conversations and entire servers from auto-deletion; exclusions persist locally.
 - **In-Discord glass dashboard:** floating and draggable UI, color-coded disabled/enabled states, timer controls and collapsible diagnostics.
 - **No manual token entry or token scraping:** uses Discord's internal authenticated `RestAPI.del()` or `MessageActions.deleteMessage()` when discoverable.
 - **Inline expiry indicators:** a live timer appears next to each visible, newly sent message in Discord DMs and servers; it disappears after an attempt or cancellation. No message text is read or stored.
-- **Honest counters:** **Queued / Deleted / Errors**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted.
-- **Draggable mini dashboard:** **Minimize (−)** collapses the full overlay to a **same-width, shorter status window** (both modes are scaled down by 12%) showing live **Queued / Deleted / Errors** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
+- **Honest counters:** **Queued / Deleted**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted. Caught errors are recorded in Diagnostics rather than shown as a counter.
+- **Draggable mini dashboard:** **Minimize (−)** collapses the full overlay to a **same-width, shorter status window** (both modes are scaled down by 12%) showing live **Queued / Deleted** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
 - **Local preferences:** delays, scope, and excluded DM/server IDs are remembered in the browser; **the script starts disabled on every fresh load**.
 
 ## Quick start — Discord Web console
@@ -106,7 +106,7 @@ DiscordAutoDelete.stop()               // Remove script UI and stop
 | --- | --- |
 | **Queued** | Message-deletion timers still pending; visible messages have inline countdown badges until the attempt |
 | **Deleted** | Matching `MESSAGE_DELETE` events observed **after the tool attempted a deletion**. Not a guaranteed server-confirmed total; may be zero if these events are unavailable |
-| **Errors** | Errors the script catches; background failures may be missing |
+Caught errors are reported in the **Diagnostics** activity log and remain available through `DiscordAutoDelete.status().failed`; background failures may not always be detected.
 
 ### Important limitations and Discord policy
 

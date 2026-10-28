@@ -41,14 +41,6 @@ function createEnvironment(options = {}) {
   const ids = new Map();
   const messageContents = new Map();
   let overlayHost = null;
-  const presets = ["servers", "dm"].flatMap(kind =>
-    ["60"].map(delay => {
-      const e = fakeElement();
-      e.dataset.delay = delay;
-      e.dataset.delayFor = kind;
-      return e;
-    })
-  );
   const scopeButtons = ["all", "servers", "dm"].map(scope => {
     const btn = fakeElement();
     btn.dataset.scope = scope;
@@ -60,7 +52,6 @@ function createEnvironment(options = {}) {
       return ids.get(id);
     },
     querySelectorAll(selector) {
-      if (selector === "[data-delay-for]") return presets;
       if (selector === "[data-scope]") return scopeButtons;
       throw new Error("Unexpected selector: " + selector);
     },
@@ -294,7 +285,7 @@ function createEnvironment(options = {}) {
     },
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
     emitDelete: id => dispatcher.dispatch({ type: "MESSAGE_DELETE", id }),
-    flushTimers, timers, deletions, calls, cached, restURLs, stored, presets, scopeButtons,
+    flushTimers, timers, deletions, calls, cached, restURLs, stored, scopeButtons,
     proxyReads, tick: () => interval(), documentDispatch: (type, event) => documentEvents.get(type)?.(event)
   };
 }
@@ -371,14 +362,16 @@ function createEnvironment(options = {}) {
     "Footer still exposes diagnostics");
   assert.match(source, /<span>Deleted<\/span>/,
     "A successful deletion must be observed, not assumed from an attempt");
-  assert.match(source, /<span>Errors<\/span>/,
-    "Caught is relabeled Errors");
+  assert.doesNotMatch(source, /<span>Errors<\/span>|id="ad-failed"|id="ad-mini-errors"/,
+    "Errors appear in Diagnostics logs, not as standalone stat cards");
   assert.doesNotMatch(source, /<span>Attempts<\/span>|<span>Caught<\/span>/,
     "Obsolete counter labels are removed");
   assert.match(source, /Deletion events observed after an AutoDelete attempt/,
     "Deleted title is honest about event observations");
-  assert.match(source, /background HTTP failures may not appear/,
-    "Errors title explicitly limits what it counts");
+  assert.match(source, /notify\("Caught delete error:/,
+    "Deletion errors are logged in Diagnostics");
+  assert.match(source, /state\.recent\.slice\(0, 18\)/,
+    "Diagnostics retains more log entries, including recent errors");
   assert.match(source, /backdrop-filter:blur\(28px\) saturate\(165%\)/,
     "Subtle glass effect is applied to the overall panel");
   assert.match(source, /background:radial-gradient/,
@@ -438,17 +431,17 @@ function createEnvironment(options = {}) {
     "UI order: Enable/Disable → Where to delete → DMs → Servers → Counters");
   const dmBlock = e.ids.get("ad-dm-block");
   const serverBlock = e.ids.get("ad-server-block");
-  assert.match(source, /grid-template-columns:minmax\(0,\.9fr\) minmax\(0,1\.4fr\)/,
-    "Delay row reserves more space for exclusions");
-  assert.match(source, /\.presets\{display:contents\}/,
-    "Preset wrapper does not occupy an extra grid cell");
+  assert.match(source, /\.delay\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/,
+    "DM and server delays use equal-width custom and exclusion controls");
+  assert.match(source, /\.statrow\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/,
+    "Only Queued and Deleted share equal-width stat cards");
+  assert.match(source, /\.mini-stats\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/,
+    "Minimized status retains two aligned counters");
+  assert.doesNotMatch(source, /data-delay-for=|class="presets"|>60s<\/button>/,
+    "There are no fixed-delay preset buttons");
   for (const kind of ["dm", "servers"]) {
-    const renderedPresets = [...source.matchAll(new RegExp('data-delay-for="' + kind + '" data-delay="(\\d+)"', "g"))]
-      .map(match => match[1]);
-    assert.deepEqual(renderedPresets, ["60"],
-      kind + " row has custom delay / exclusions / 60s");
-    assert.equal(e.presets.filter(p => p.dataset.delayFor === kind).length, 1,
-      "Mock and markup expose only one preset button for " + kind);
+    assert.match(source, new RegExp('id="ad-exclude-' + kind + '"'),
+      "Exclusion picker remains for " + kind);
   }
   assert.equal(dmBlock.style.display, "", "Everywhere shows DM timing");
   assert.equal(serverBlock.style.display, "", "Everywhere shows server timing");
@@ -499,7 +492,6 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-mini-queued").textContent, 1,
     "Mini Queued counter updates while minimized");
   assert.equal(e.ids.get("ad-mini-deleted").textContent, 0);
-  assert.equal(e.ids.get("ad-mini-errors").textContent, 0);
   api.open();
   assert.equal(e.ids.get("ad-panel").style.display, "",
     "Restored overlay retains monitoring state");
@@ -671,12 +663,10 @@ function createEnvironment(options = {}) {
   const settingsStored = JSON.parse(splitDelays.stored.get("discord-autodelete-ui-v2"));
   assert.equal(settingsStored.serverDelay, 30);
   assert.equal(settingsStored.dmDelay, 60);
-  const uiServers = splitDelays.presets.find(p => p.dataset.delayFor === "servers" && p.dataset.delay === "60");
-  const uiDm = splitDelays.presets.find(p => p.dataset.delayFor === "dm" && p.dataset.delay === "60");
-  uiServers.dispatch("click");
-  uiDm.dispatch("click");
-  assert.equal(dual.status().serverDelaySeconds, 60, "Server 60s preset only changes server delay");
-  assert.equal(dual.status().dmDelaySeconds, 60, "DM 60s preset only changes DM delay");
+  // Custom values stay independent even though the fixed 60s shortcuts are gone.
+  assert.equal(dual.status().serverDelaySeconds, 30);
+  assert.equal(dual.status().dmDelaySeconds, 60);
+  assert.equal(splitDelays.timers.size, 3, "Editing custom delay does not cancel earlier jobs");
   dual.pause();
   assert.equal(dual.status().pending, 0);
   dual.stop();
@@ -687,7 +677,7 @@ function createEnvironment(options = {}) {
   ] });
   vm.runInContext(source, persisted.context, { timeout: 3000 });
   const afterReload = persisted.window.DiscordAutoDelete;
-  assert.equal(afterReload.status().serverDelaySeconds, 60);
+  assert.equal(afterReload.status().serverDelaySeconds, 30);
   assert.equal(afterReload.status().dmDelaySeconds, 60);
   assert.equal(afterReload.running, false, "Never enable by default after reload");
   afterReload.stop();
