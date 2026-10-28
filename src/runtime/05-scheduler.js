@@ -69,9 +69,10 @@
   function newSinceEnabled(msg, channelId, fromCache) {
     const created = messageCreatedAt(msg);
     if (!Number.isFinite(created) || !state.enabledSince) return false;
-    const boundary = fromCache ?
-      Math.max(state.enabledSince, state.cacheObservedSince.get(channelId) ?? state.enabledSince) :
-      state.enabledSince;
+    // Cache hydration can occur after a newly sent message. The message's
+    // actual creation time (not the channel cache's first observation) is
+    // the authoritative safety boundary.
+    const boundary = state.enabledSince;
     return created >= boundary - CREATION_SKEW_MS &&
       created <= Date.now() + MAX_FUTURE_CLOCK_SKEW_MS;
   }
@@ -141,6 +142,7 @@
   }
   function onUpdate(event) {
     if (!state.enabled || !hooks || state.destroyed) return;
+    state.telemetry.updates++;
     const fromEvent = event?.message;
     const channelId = String(event?.channelId ?? event?.channel_id ??
       fromEvent?.channel_id ?? fromEvent?.channelId ?? "");
@@ -165,10 +167,23 @@
     if (!state.enabled || !hooks || state.destroyed) return;
     const msg = event?.message;
     if (!msg || String(msg.author?.id ?? "") !== state.accountId) return;
+    state.telemetry.ownEvents++;
+    state.telemetry.lastOwnEventAt = Date.now();
     const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
-    if (!validId(channelId) || !newSinceEnabled(msg, channelId, event?.fromCache === true)) return;
+    if (!validId(channelId)) {
+      state.telemetry.invalidChannel++;
+      return;
+    }
+    // Critical: an optimistic SENDING message may use a nonce as its ID
+    // and have no valid server timestamp. Remember it BEFORE age filtering,
+    // but never enqueue it until a confirmed message passes the age guard.
     if (isProvisional(msg, event)) {
+      state.telemetry.provisional++;
       rememberProvisional(msg, channelId);
+      return;
+    }
+    if (!newSinceEnabled(msg, channelId, event?.fromCache === true)) {
+      state.telemetry.ageRejected++;
       return;
     }
     const id = String(msg.id ?? "");
@@ -192,6 +207,7 @@
         state.processedNonces.delete(state.processedNonces.values().next().value);
     }
     state.detected++;
+    state.telemetry.confirmed++;
     const job = { id, channelId, guildId, kind, deadline: 0, timer: null, retries: 0 };
     state.pending.set(id, job);
     reserveDeletionSlot(job, delaySeconds * 1000);
@@ -229,10 +245,11 @@
     if (!cache) return;
     const { channelId, items } = cache;
     if (!state.cacheSeen.has(channelId)) {
-      // Establish a baseline instead of accidentally deleting old history.
-      state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
+      // On first visit, old history is rejected by message creation time.
+      // A just-sent message must not be lost merely because it arrived before
+      // the first cache poll (especially after navigating between channels).
+      state.cacheSeen.set(channelId, new Set());
       state.cacheObservedSince.set(channelId, Date.now());
-      return;
     }
     const seen = state.cacheSeen.get(channelId);
     for (const msg of items) {
@@ -242,8 +259,10 @@
       // message might transition to SENT without changing its ID.
       if (isProvisional(msg)) continue;
       seen.add(id);
-      if (String(msg.author?.id ?? "") === state.accountId)
+      if (String(msg.author?.id ?? "") === state.accountId) {
+        state.telemetry.cacheCandidates++;
         onCreate({ message: msg, channelId, fromCache: true });
+      }
     }
     if (seen.size > 2500) {
       state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
@@ -330,6 +349,8 @@
     state.nextDeletionAt = 0;
     provisional.clear();
     state.enabledSince = Date.now();
+    state.telemetry = { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0,
+      ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0 };
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();

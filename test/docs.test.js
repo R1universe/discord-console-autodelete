@@ -28,7 +28,7 @@ assert.match(en, /Not a guaranteed server-confirmed total/i, "Counters do not ov
 assert.match(en, /Each category has its own \*\*Excluded\*\* picker/i, "Short Excluded selectors explained");
 assert.match(en, /Resizable Diagnostics/i, "Adjustable diagnostic log documented");
 assert.match(en, /independent switches/i, "Server and DM selection documented");
-assert.match(en, /\*\*v3\.19 · Experimental/, "Current prototype version documented");
+assert.match(en, /\*\*v3\.20 · Experimental/, "Current prototype version documented");
 assert.match(en, /Draggable mini dashboard/, "Compact draggable live status is documented");
 assert.match(en, /DiscordAutoDelete\.minimize\(\)/, "New minimize console command is documented");
 console.log("PASS: v3.14 README, exclusions, screenshot, privacy and discoverability checks");

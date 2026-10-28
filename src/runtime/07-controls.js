@@ -170,6 +170,16 @@
         scope: config.scope,
         filteredProxyExports: hooks?.ignoredProxies ?? 0, pending: state.pending.size,
         requests: state.requests, deleted: state.deleted, failed: state.failed, skipped: state.skipped,
+        detected: state.detected,
+        ownEvents: state.telemetry.ownEvents,
+        provisionalEvents: state.telemetry.provisional,
+        updateEvents: state.telemetry.updates,
+        cacheCandidates: state.telemetry.cacheCandidates,
+        confirmedScheduled: state.telemetry.confirmed,
+        ageRejected: state.telemetry.ageRejected,
+        invalidChannel: state.telemetry.invalidChannel,
+        lastOwnEventAt: state.telemetry.lastOwnEventAt ?
+          new Date(state.telemetry.lastOwnEventAt).toLocaleTimeString() : "none",
         excludedDms: config.excludedDms.length, excludedServers: config.excludedGuilds.length,
         metricsNote: "deleted = observed MESSAGE_DELETE events after attempted calls; 0 can mean missing event coverage; requests are attempts only"
       };

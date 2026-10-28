@@ -349,7 +349,7 @@ function createEnvironment(options = {}) {
   // A newer paste stops old code; a same-version paste only reopens the window.
   const sameVersion = createEnvironment();
   let sameOpened = 0;
-  sameVersion.window.DiscordAutoDelete = { version: "3.19.0", open() { sameOpened++; } };
+  sameVersion.window.DiscordAutoDelete = { version: "3.20.0", open() { sameOpened++; } };
   vm.runInContext(source, sameVersion.context, { timeout: 3000 });
   assert.equal(sameOpened, 1, "Same version reopens without duplicate instance");
   const oldVersion = createEnvironment();
@@ -361,7 +361,7 @@ function createEnvironment(options = {}) {
   };
   vm.runInContext(source, oldVersion.context, { timeout: 3000 });
   assert.equal(previousStopped, 1, "Old instance is stopped");
-  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.19.0", "New controller version");
+  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.20.0", "New controller version");
   assert.equal(oldVersion.window.DiscordAutoDelete.running, false, "Upgrade starts paused");
   oldVersion.window.DiscordAutoDelete.stop();
 
@@ -407,7 +407,7 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
 
   // v3.15: a draggable minimized status window and retained v3.14 features.
-  assert.match(source, /AutoDelete <span class="version">v3\.19<\/span>/);
+  assert.match(source, /AutoDelete <span class="version">v3\.20<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -1108,6 +1108,47 @@ function createEnvironment(options = {}) {
   assert.equal(variantsApi.status().pending, timestamps.length,
     "Hour-old messages remain ineligible even when snowflake is recent");
   variantsApi.stop();
+
+  // v3.18-v3.19 regression: the local optimistic SENDING message can
+  // lack a server timestamp. It MUST be correlated with a later SENT update.
+  const optimistic = createEnvironment({ withMessageStore: true });
+  vm.runInContext(source, optimistic.context, { timeout: 3000 });
+  const optimisticApi = optimistic.window.DiscordAutoDelete;
+  optimisticApi.resume();
+  const tx = "700000000000001111", sentId = "700000000000001112";
+  const outgoing = { author: { id: optimistic.account.id }, channel_id: "444444444444444444",
+    guild_id: "222222222222222222", nonce: tx };
+  optimistic.emit({ ...outgoing, id: tx, state: "SENDING", timestamp: "invalid",
+    optimistic: true }, { optimistic: true });
+  assert.equal(optimisticApi.status().pending, 0, "Optimistic message is never deleted before confirmation");
+  assert.equal(optimisticApi.status().provisionalEvents, 1,
+    "Provisional send is still remembered with malformed timestamp");
+  optimistic.emitUpdate({ ...outgoing, id: sentId, state: "SENT", timestamp: new Date().toISOString(),
+    optimistic: false }, { optimistic: false });
+  assert.equal(optimisticApi.status().pending, 1,
+    "Confirmed send is recovered from its provisional nonce");
+  assert.equal(optimisticApi.status().confirmedScheduled, 1);
+  assert.equal(optimisticApi.status().requests, 0, "No deletion attempt occurs before the delay");
+  assert.ok([...optimistic.timers.values()][0].ms >= 10000, "10s minimum delay is honored");
+  optimisticApi.stop();
+
+  // First visit to a server after enabling: recent own messages arriving before
+  // the first cache poll are valid, while historical messages remain ineligible.
+  const firstVisit = createEnvironment({ withoutDispatcher: true, withMessageStore: true, withRestOnly: true });
+  vm.runInContext(source, firstVisit.context, { timeout: 3000 });
+  const firstApi = firstVisit.window.DiscordAutoDelete;
+  firstApi.resume();
+  const historical = { id: "700000000000001210",
+    timestamp: new Date(Date.now() - 3600000).toISOString(),
+    author: { id: firstVisit.account.id },
+    channel_id: "555555555555555555", guild_id: "222222222222222222", state: "SENT" };
+  const justSent = { ...historical, id: "700000000000001211", timestamp: new Date().toISOString() };
+  firstVisit.selectChannel("555555555555555555");
+  firstVisit.cached.push(historical, justSent);
+  firstVisit.tick();
+  assert.equal(firstApi.status().pending, 1, "Fresh message is recovered on first cache observation");
+  assert.ok(firstApi.status().ageRejected >= 1, "Historical message is rejected based on creation time");
+  firstApi.stop();
 
   // Safety regression: old messages must NEVER be eligible just because
   // channel switch/history hydration makes them visible in cache.
