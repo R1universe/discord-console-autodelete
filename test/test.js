@@ -345,10 +345,11 @@ function createEnvironment(options = {}) {
     assert.ok(script.includes('.delay .value,.delay .exclude-btn{'), file + " harmonizes font metrics and control heights");
     assert.ok(script.includes('.diag-bottom-resizer{'), file + " supports footer-edge resize styling");
   }
+  assert.doesNotMatch(source, /function choose\(candidates, predicate/, "Obsolete unused discovery helper removed");
   // A newer paste stops old code; a same-version paste only reopens the window.
   const sameVersion = createEnvironment();
   let sameOpened = 0;
-  sameVersion.window.DiscordAutoDelete = { version: "3.17.0", open() { sameOpened++; } };
+  sameVersion.window.DiscordAutoDelete = { version: "3.18.0", open() { sameOpened++; } };
   vm.runInContext(source, sameVersion.context, { timeout: 3000 });
   assert.equal(sameOpened, 1, "Same version reopens without duplicate instance");
   const oldVersion = createEnvironment();
@@ -360,7 +361,7 @@ function createEnvironment(options = {}) {
   };
   vm.runInContext(source, oldVersion.context, { timeout: 3000 });
   assert.equal(previousStopped, 1, "Old instance is stopped");
-  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.17.0", "New controller version");
+  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.18.0", "New controller version");
   assert.equal(oldVersion.window.DiscordAutoDelete.running, false, "Upgrade starts paused");
   oldVersion.window.DiscordAutoDelete.stop();
 
@@ -406,7 +407,7 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
 
   // v3.15: a draggable minimized status window and retained v3.14 features.
-  assert.match(source, /AutoDelete <span class="version">v3\.17<\/span>/);
+  assert.match(source, /AutoDelete <span class="version">v3\.18<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,

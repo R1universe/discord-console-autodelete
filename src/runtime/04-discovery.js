@@ -48,17 +48,6 @@
     }
     return found;
   }
-  function choose(candidates, predicate, displayName, preference) {
-    const matches = candidates.filter(item => {
-      try { return predicate(item); } catch { return false; }
-    });
-    const preferred = matches.filter(item => {
-      try { return preference?.(item); } catch { return false; }
-    });
-    const options = preferred.length === 1 ? preferred : matches.length === 1 ? matches : [];
-    if (options.length !== 1) throw new Error(displayName + ": " + matches.length + " candidates; cannot select safely");
-    return options[0];
-  }
   const storeNamed = name => obj => {
     try { return Object.getPrototypeOf(obj)?.constructor?.displayName === name || obj?.constructor?.displayName === name; }
     catch { return false; }

@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.17 — compact UI and bottom-edge log resizing
+ * Discord AutoDelete v3.18 — compact UI and bottom-edge log resizing
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.17.0";
+  const VERSION = "3.18.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -181,7 +181,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.17</span></h1><div class="brand-by">by Archivarius</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.18</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -436,17 +436,6 @@
       } catch {}
     }
     return found;
-  }
-  function choose(candidates, predicate, displayName, preference) {
-    const matches = candidates.filter(item => {
-      try { return predicate(item); } catch { return false; }
-    });
-    const preferred = matches.filter(item => {
-      try { return preference?.(item); } catch { return false; }
-    });
-    const options = preferred.length === 1 ? preferred : matches.length === 1 ? matches : [];
-    if (options.length !== 1) throw new Error(displayName + ": " + matches.length + " candidates; cannot select safely");
-    return options[0];
   }
   const storeNamed = name => obj => {
     try { return Object.getPrototypeOf(obj)?.constructor?.displayName === name || obj?.constructor?.displayName === name; }
