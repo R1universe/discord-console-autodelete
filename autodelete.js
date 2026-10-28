@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.16 — paced deletion and robust send tracking
+ * Discord AutoDelete v3.17 — compact UI and bottom-edge log resizing
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,7 +10,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.16.0";
+  const VERSION = "3.17.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -115,7 +115,6 @@
     ".diagnostics>summary::-webkit-details-marker{display:none}.diagnostics>summary:after{content:'⌄';font-size:17px;line-height:12px;color:#a8b4bd;transform:translateY(-1px)}.diagnostics[open]>summary:after{transform:rotate(180deg)}",
     ".diag-body{padding:2px 0 14px;border-top:1px solid #303944}.diag-title{margin:10px 0 7px;font-size:10px;letter-spacing:.4px;font-weight:700;color:#b2bfca}",
     ".loglist{height:170px;min-height:100px;max-height:min(60vh,520px);overflow:auto;scrollbar-width:thin;color:#aeb9c1;font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px}",
-    ".diag-resizer{height:17px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;user-select:none}.diag-resizer span{display:block;width:52px;height:4px;border-radius:99px;background:#a1b5ba66}.diag-resizer:hover span,.diag-resizer:focus-visible span{background:var(--ad-accent)}",
     ".logitem{padding:3px 0;overflow-wrap:anywhere;line-height:1.45}.logitem .time{color:#87929d;margin-right:5px}.logitem.bad{color:#f1a9af}.logitem.good{color:#94dab6}",
     ".footer button.diag-action{border:1px solid #33404a;background:linear-gradient(140deg,#20272f,#171e25);color:#d8e0e7;border-radius:9px;padding:10px;width:100%;margin-top:12px}.footer button.diag-action:hover{background:#28333b}",
     "@media(max-width:500px){.panel{max-width:calc(100vw - 16px)}.body{padding:14px}.head{padding:13px 14px}.footer{padding:0 14px}}",
@@ -166,7 +165,11 @@
     ".mini-stat strong{font-size:18px;line-height:1.1;color:#f7fffa;font-variant-numeric:tabular-nums}.mini-stat span{font-size:9px;color:#d7e4e8;font-weight:600;letter-spacing:-.1px}",
     ".mini-restore{position:absolute;top:5px;right:5px;border:1px solid #d5edff44;border-radius:7px;background:#ffffff1a;color:#edf5ff;font-size:13px;line-height:17px;width:22px;height:22px;padding:0;cursor:pointer}.mini-restore:hover{background:#ffffff2e}.mini-restore:focus-visible{outline:2px solid #9dffdb;outline-offset:2px}",
     ".mini-panel[hidden]{display:none!important}",
-    /* One 12% scale reduction in both dimensions; mini and full retain equal widths. */
+    /* Equal widths for the full and minimized window; typography is unchanged by shrinking width. */
+    ".panel{width:344px}.mini-panel{width:344px}",
+    ".delay{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:8px}.delay .value,.delay .exclude-btn{box-sizing:border-box;height:44px;min-height:44px;font-size:14px;font-weight:500;line-height:20px;border-radius:13px}.delay .value{padding:11px 13px}.delay .exclude-btn{display:flex;align-items:center;justify-content:center;padding:8px 5px;white-space:nowrap;letter-spacing:0}",
+    ".diag-bottom-resizer{height:17px;margin:0 -16px;display:flex;align-items:flex-end;justify-content:center;cursor:ns-resize;touch-action:none;user-select:none;border-bottom:3px solid #b5ffde34;border-radius:0 0 23px 23px;transition:border-color .15s}.diag-bottom-resizer span{width:65px;height:3px;margin-bottom:3px;background:#b5ffde56;border-radius:99px}.diag-bottom-resizer:hover,.diag-bottom-resizer:focus-visible{border-bottom-color:var(--ad-accent);outline:0}.diag-bottom-resizer:hover span,.diag-bottom-resizer:focus-visible span{background:var(--ad-accent)}",
+    /* Keep existing 88% UI zoom while narrowing only the panel width. */
     ".ad-shell{zoom:.88}",
     "@media(prefers-reduced-motion:reduce){.panel,.primary{transition:none}}"
   ].join("\n");
@@ -178,7 +181,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.16</span></h1><div class="brand-by">by Archivarius</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.17</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -216,10 +219,10 @@
       '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
         '<summary>Diagnostics</summary>',
         '<div class="diag-body">',
-          '<div class="diag-resizer" id="ad-diag-resize" role="separator" aria-label="Resize diagnostics log" aria-orientation="horizontal" tabindex="0" title="Drag down to expand the log, or use arrow keys"><span></span></div>',
           '<div class="loglist" id="ad-logs" aria-live="polite"></div>',
           '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
         '</div>',
+        '<div class="diag-bottom-resizer" id="ad-diag-resize" role="separator" aria-label="Resize Diagnostics from bottom edge" aria-orientation="horizontal" tabindex="0" title="Drag the bottom edge to resize logs, or use arrow keys"><span></span></div>',
       '</details></div>',
     '</section>',
     '<aside class="mini-panel" id="ad-mini-panel" hidden role="region" aria-label="Minimized AutoDelete status">',
@@ -1176,7 +1179,7 @@
   el("ad-min").addEventListener("click", minimizePanel);
   el("ad-restore").addEventListener("click", showPanel);
 
-  // Drag the handle down to expand Diagnostics without changing deletion behavior.
+  // Drag the bottom border to expand Diagnostics without changing deletion behavior.
   let diagnosticsResize = null;
   const resizeHandle = el("ad-diag-resize"), logView = el("ad-logs");
   logView.style.height = config.diagnosticsHeight + "px";
@@ -1191,7 +1194,13 @@
     logView.style.height = config.diagnosticsHeight + "px";
   };
   const onDiagnosticsMove = event => {
-    if (diagnosticsResize) resizeTo(diagnosticsResize.height + (event.clientY - diagnosticsResize.y) / 0.88);
+    if (!diagnosticsResize) return;
+    // Keep the bottom border in view while increasing the log viewport.
+    const panel = el("ad-panel");
+    const rect = panel.getBoundingClientRect?.();
+    const room = Math.max(0, (window.innerHeight ?? 900) - 8 - (rect?.bottom ?? 0));
+    const requested = diagnosticsResize.height + (event.clientY - diagnosticsResize.y) / 0.88;
+    resizeTo(Math.min(requested, Math.max(100, diagnosticsResize.height + room / 0.88)));
   };
   const endDiagnosticsResize = () => { if (diagnosticsResize) { diagnosticsResize = null; save(); } };
   resizeHandle.addEventListener("keydown", event => {
