@@ -1,8 +1,8 @@
 /**
  * @name AutoDelete
  * @author Archivarius
- * @description Discord AutoDelete v3.21 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
- * @version 3.21.0
+ * @description Discord AutoDelete v3.22 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
+ * @version 3.22.0
  * @source https://github.com/R1universe/discord-console-autodelete/blob/main/AutoDelete.plugin.js
  */
 
@@ -11,7 +11,7 @@
 "use strict";
 
 /*
- * Discord AutoDelete v3.21 — compact UI and bottom-edge log resizing
+ * Discord AutoDelete v3.22 — compact UI and bottom-edge log resizing
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
