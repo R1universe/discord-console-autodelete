@@ -1,5 +1,5 @@
 /*
- * Discord AutoDelete v3.15 — draggable minimized status window
+ * Discord AutoDelete v3.16 — paced deletion and robust send tracking
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -10,15 +10,29 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.15.0";
+  const VERSION = "3.16.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
 
   if (window[NAME]?.open) {
-    window[NAME].open();
-    console.info("[AutoDelete] Already installed in this tab. Reopened the panel.");
-    return;
+    if (window[NAME].version === VERSION) {
+      window[NAME].open();
+      console.info("[AutoDelete] Version " + VERSION + " already running; panel reopened.");
+      return;
+    }
+    // Pasting an updated script used to reopen older code instead of loading it.
+    // Stopping an older build cancels its pending timers; new build starts disabled.
+    try { window[NAME].stop?.(); }
+    catch (error) {
+      console.warn("[AutoDelete] Could not stop older version:", error);
+      return;
+    }
+    if (window[NAME]?.open) {
+      console.warn("[AutoDelete] Older instance is still active; stop it before upgrading.");
+      return;
+    }
+    console.info("[AutoDelete] Previous version stopped; new build starts disabled.");
   }
   if (location.hostname !== "discord.com" && !location.hostname.endsWith(".discord.com")) {
     console.error("[AutoDelete] Open https://discord.com/app first.");
@@ -164,7 +178,7 @@
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.15</span></h1><div class="brand-by">by Archivarius</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.16</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -1234,6 +1248,7 @@
   }
   el("ad-close").addEventListener("click", stop);
   const controller = {
+    get version() { return VERSION; },
     get running() { return state.ready && state.enabled && !state.destroyed; },
     get connected() { return state.ready; },
     open() { showPanel(); },
