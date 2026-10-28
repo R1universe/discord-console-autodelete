@@ -25,16 +25,42 @@
     return msg.nonce != null && id === String(msg.nonce);
   }
 
-  // Fail closed: loaded history and cache hydration are NOT new outgoing messages.
-  // A message's creation timestamp, not its cache-discovery time, determines eligibility.
+  // Fail closed on old history; parse all supported Discord timestamp forms.
   const CREATION_SKEW_MS = 2000;
-  function messageCreatedAt(msg) {
-    const value = msg?.timestamp ?? msg?.created_at ?? msg?.createdAt;
-    if (value != null) {
-      const parsed = typeof value === "number" ? value : Date.parse(String(value));
-      if (Number.isFinite(parsed)) return parsed;
+  const MAX_FUTURE_CLOCK_SKEW_MS = 30000;
+  function normalizeUnixTime(value) {
+    if (value == null) return NaN;
+    if (typeof value === "number" || typeof value === "bigint") {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return NaN;
+      if (n > 1000000000 && n < 100000000000) return n * 1000;
+      return n > 100000000000 ? n : NaN;
     }
-    // Discord snowflakes encode a server-side creation timestamp.
+    if (typeof value === "string") {
+      const str = value.trim();
+      if (/^\d{10}(?:\.\d+)?$/.test(str) || /^\d{13}$/.test(str))
+        return normalizeUnixTime(Number(str));
+      const parsed = Date.parse(str);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    }
+    if (typeof value === "object") {
+      try {
+        const primitive = value.valueOf?.();
+        if (primitive !== value) {
+          const parsed = normalizeUnixTime(primitive);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+      } catch {}
+      try { return normalizeUnixTime(value.toISOString?.()); } catch {}
+    }
+    return NaN;
+  }
+  function messageCreatedAt(msg) {
+    for (const value of [msg?.timestamp, msg?.created_at, msg?.createdAt]) {
+      const ms = normalizeUnixTime(value);
+      if (Number.isFinite(ms)) return ms;
+    }
+    // When timestamp metadata is missing, use Discord's snowflake creation time.
     const id = String(msg?.id ?? "");
     if (!validId(id)) return NaN;
     try { return Number((BigInt(id) >> 22n) + 1420070400000n); }
@@ -46,8 +72,8 @@
     const boundary = fromCache ?
       Math.max(state.enabledSince, state.cacheObservedSince.get(channelId) ?? state.enabledSince) :
       state.enabledSince;
-    // Prevent backfilled history, future/invalid timestamps, and old edits.
-    return created >= boundary - CREATION_SKEW_MS && created <= Date.now() + CREATION_SKEW_MS;
+    return created >= boundary - CREATION_SKEW_MS &&
+      created <= Date.now() + MAX_FUTURE_CLOCK_SKEW_MS;
   }
   // Space out expirations: Discord can rate-limit simultaneous deletions.
   const DELETE_SPACING_MS = 1400;
