@@ -115,7 +115,16 @@ function createEnvironment(options = {}) {
   const restURLs = [];
   const rest = {
     get() {}, post() {}, put() {}, patch() {},
-    del({ url }) { restURLs.push(url); return Promise.resolve(); }
+    del({ url }) {
+      restURLs.push(url);
+      if (options.rateLimitOnce && restURLs.length === 1) {
+        const error = new Error("Rate limited");
+        error.status = 429;
+        error.retry_after = 0.3;
+        return Promise.reject(error);
+      }
+      return Promise.resolve();
+    }
   };
   const users = {
     getCurrentUser() { return account; },
@@ -299,6 +308,7 @@ function createEnvironment(options = {}) {
     },
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
     emitDelete: id => dispatcher.dispatch({ type: "MESSAGE_DELETE", id }),
+    emitUpdate: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_UPDATE", message, ...extra }),
     flushTimers, timers, deletions, calls, cached, restURLs, stored, scopeButtons,
     proxyReads, tick: () => interval(), documentDispatch: (type, event) => {
       for (const fn of documentEvents.get(type) ?? []) fn(event);
@@ -641,8 +651,9 @@ function createEnvironment(options = {}) {
   quickApi.resume();
   quick.post("555555555555555555");
   quick.post("666666666666666666", quick.account.id, "333333333333333333");
-  assert.deepEqual([...quick.timers.values()].map(t => t.ms), [1000, 1000],
-    "One-second delays schedule one-second browser timers for both channel types");
+  const quickWaits = [...quick.timers.values()].map(t => t.ms);
+  assert.ok(quickWaits[0] >= 1000 && quickWaits[0] < 1050 && quickWaits[1] - quickWaits[0] >= 1300,
+    "One-second minimum delay is preserved while overlapping deletions are paced");
   quickApi.pause(); // No HTTP calls needed for this timing test.
   assert.equal(quickApi.status().pending, 0);
   quickApi.stop();
@@ -669,11 +680,13 @@ function createEnvironment(options = {}) {
   splitDelays.post("666666666666666666", splitDelays.account.id, "333333333333333333"); // 1:1 DM
   splitDelays.post("777777777777777777", splitDelays.account.id, "888888888888888888"); // Group DM, type 3
   assert.equal(dual.status().pending, 3);
-  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000, 60000],
-    "Different timer durations for server and DM messages");
+  const splitWaits = [...splitDelays.timers.values()].map(t => t.ms);
+  assert.ok(splitWaits[0] >= 5000 && splitWaits[0] < 5050 &&
+    splitWaits[1] >= 60000 && splitWaits[2] - splitWaits[1] >= 1300,
+    "Distinct delays are retained and simultaneous DM expirations are paced");
   // Changing a delay must not alter the scheduled timers.
   dual.setServerDelay(30);
-  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), [5000, 60000, 60000],
+  assert.deepEqual([...splitDelays.timers.values()].map(t => t.ms), splitWaits,
     "Old pending deadlines remain intact after changing a setting");
   const settingsStored = JSON.parse(splitDelays.stored.get("discord-autodelete-ui-v2"));
   assert.equal(settingsStored.serverDelay, 30);
@@ -1017,6 +1030,69 @@ function createEnvironment(options = {}) {
   handle.dispatch("keydown", { key: "ArrowUp", preventDefault() {}, stopPropagation() {} });
   assert.equal(logView.style.height, "246px", "Arrow keys also resize");
   resizeEnv.window.DiscordAutoDelete.stop();
+
+  // Flood regression: the original code would fire DELETEs simultaneously.
+  // Every confirmed own message should be queued exactly once with paced slots.
+  const burst = createEnvironment();
+  vm.runInContext(source, burst.context, { timeout: 3000 });
+  const burstApi = burst.window.DiscordAutoDelete;
+  burstApi.setServerDelay(4);
+  burstApi.resume();
+  const burstIds = Array.from({ length: 24 }, (_, i) => String(700000000000000000n + BigInt(i)));
+  burstIds.forEach(id => burst.post(id));
+  assert.equal(burstApi.status().pending, 24, "All 24 own sends enter the queue");
+  const slots = [...burst.timers.values()].map(v => v.ms);
+  assert.equal(slots.length, 24);
+  assert.ok(slots[0] >= 4000);
+  for (let i = 1; i < slots.length; i++) {
+    assert.ok(slots[i] - slots[i - 1] >= 1300,
+      "Adjacent deletion slots must not collide under a rapid burst");
+  }
+  await burst.flushTimers();
+  assert.equal(burst.deletions.length, 24, "Every burst message gets one delete attempt");
+  assert.equal(new Set(burst.deletions.map(entry => entry[1])).size, 24);
+  assert.equal(burstApi.status().pending, 0);
+  assert.equal(burstApi.status().requests, 24);
+  burstApi.stop();
+
+  // A reported 429 keeps its message queued and honors a delay before retrying.
+  const limited = createEnvironment({ withRestOnly: true, rateLimitOnce: true });
+  vm.runInContext(source, limited.context, { timeout: 3000 });
+  const limitedApi = limited.window.DiscordAutoDelete;
+  limitedApi.resume();
+  limited.post("700000000000000100");
+  await limited.flushTimers();
+  assert.equal(limitedApi.status().pending, 1, "A 429 must not discard pending deletion");
+  assert.equal(limited.restURLs.length, 1);
+  assert.equal(limited.timers.size, 1, "A bounded rate-limit retry is scheduled");
+  assert.ok([...limited.timers.values()][0].ms >= 1500, "Rate-limit wait is respected");
+  await limited.flushTimers();
+  assert.equal(limitedApi.status().pending, 0);
+  assert.equal(limitedApi.status().requests, 2, "Retry is included in attempt count");
+  assert.equal(limitedApi.status().failed, 0, "Recovered 429 is not a permanent error");
+  limitedApi.stop();
+
+  // Rapid optimistic -> confirmed transitions via MESSAGE_UPDATE are eligible,
+  // but an unrelated historical edit is not.
+  const updates = createEnvironment({ withMessageStore: true });
+  vm.runInContext(source, updates.context, { timeout: 3000 });
+  const updateApi = updates.window.DiscordAutoDelete;
+  updateApi.resume();
+  const draftNonce = "700000000000000201", finalId = "700000000000000202";
+  const own = { author: { id: updates.account.id }, channel_id: "444444444444444444",
+    guild_id: "222222222222222222", nonce: draftNonce };
+  updates.emit({ ...own, id: draftNonce, state: "SENDING", optimistic: true }, { optimistic: true });
+  assert.equal(updateApi.status().pending, 0);
+  updates.emitUpdate({ ...own, id: finalId, state: "SENT", optimistic: false }, { optimistic: false });
+  updates.emitUpdate({ ...own, id: finalId, state: "SENT", optimistic: false }, { optimistic: false });
+  assert.equal(updateApi.status().pending, 1,
+    "Acknowledged rapid send via MESSAGE_UPDATE is queued once");
+  updates.emitUpdate({ ...own, id: "700000000000000299", nonce: "700000000000000298",
+    state: "SENT", optimistic: false }, { optimistic: false });
+  assert.equal(updateApi.status().pending, 1, "Unrelated edits are never scheduled");
+  await updates.flushTimers();
+  assert.deepEqual(updates.deletions, [["444444444444444444", finalId]]);
+  updateApi.stop();
 
   // Exclusions are persistent, but deletion is always disabled after reload.
   const remembered = createEnvironment({ initialStorage: [
