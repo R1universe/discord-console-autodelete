@@ -150,6 +150,24 @@
   }
   // Track provisional self-sends so MESSAGE_UPDATE does not delete old edited history.
   const provisional = new Map();
+  // Direct evidence of this account sending a NEW message is stronger than
+  // discord's optional clock-derived timestamp. Only pair the confirmed ID
+  // with a nonce observed in this session, in the same channel, after Enable.
+  // A bounded snowflake age check prevents accidental deletion of old history.
+  function recentlyConfirmedLocalSend(msg, channelId) {
+    if (msg?.nonce == null) return false;
+    const id = String(msg.id ?? "");
+    const nonce = String(msg.nonce);
+    if (!validId(id) || id === nonce) return false;
+    const observed = provisional.get(channelId + ":" + nonce);
+    const now = Date.now();
+    if (!Number.isFinite(observed) || observed < state.enabledSince ||
+        now - observed > 90000) return false;
+    const serverCreated = snowflakeCreatedAt(id);
+    return Number.isFinite(serverCreated) &&
+      serverCreated >= state.enabledSince - 90000 &&
+      serverCreated <= now + MAX_FUTURE_CLOCK_SKEW_MS;
+  }
   function rememberProvisional(msg, channelId) {
     if (!validId(channelId) || !(msg.nonce != null || validId(msg.id))) return;
     provisional.set(channelId + ":" + String(msg.nonce ?? msg.id), Date.now());
@@ -197,9 +215,15 @@
       rememberProvisional(msg, channelId);
       return;
     }
-    if (!newSinceEnabled(msg, channelId, event?.fromCache === true)) {
+    const fresh = newSinceEnabled(msg, channelId, event?.fromCache === true);
+    if (!fresh && !recentlyConfirmedLocalSend(msg, channelId)) {
       state.telemetry.ageRejected++;
       return;
+    }
+    if (!fresh) {
+      state.telemetry.nonceRecovered++;
+      state.telemetry.lastAgeRejectionReason = "confirmed_local_send";
+      state.telemetry.lastRejectedAgeSeconds = null;
     }
     const id = String(msg.id ?? "");
     if (!validId(id) || !validId(channelId) || state.pending.has(id) || state.processed.has(id)) return;
@@ -218,6 +242,7 @@
     if (state.processed.size > 5000) state.processed.delete(state.processed.values().next().value);
     if (nonceKey) {
       state.processedNonces.add(nonceKey);
+      provisional.delete(nonceKey);
       if (state.processedNonces.size > 5000)
         state.processedNonces.delete(state.processedNonces.values().next().value);
     }
@@ -366,7 +391,7 @@
     state.enabledSince = Date.now();
     state.telemetry = { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0,
       ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0,
-      snowflakeRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null };
+      snowflakeRecovered: 0, nonceRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null };
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();
