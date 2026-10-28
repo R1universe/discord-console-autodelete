@@ -136,3 +136,19 @@ Caught errors are reported in the **Diagnostics** activity log and remain availa
 - [GitHub Topics and discovery settings](./docs/REPOSITORY_DISCOVERY.md)
 
 If you find this **self-destructing-style Discord message timer** useful, consider starring the repository. For bug reports, include reproducible steps but **never** tokens, real message contents or private identifiers.
+
+
+### Source layout and build
+
+The console and BetterDiscord scripts are generated from the **same runtime source** in `src/runtime/`. These seven ordered fragments separate state, styles, dashboard, Discord-module discovery, scheduling, exclusions and UI controls. They run inside one private closure in the generated scripts; the fragments are not individually pasteable.
+
+`src/entry/` contains the two distribution templates. After changing sources, run:
+
+```sh
+node scripts/build.js
+node test/test.js
+```
+
+CI runs `node scripts/build.js --check` and refuses to pass if `autodelete.js` or `AutoDelete.plugin.js` differs from the shared source. **Do not edit generated distributions manually.** No external dependencies are required to build, and the shipped console file remains copy-pasteable.
+
+**History safety:** AutoDelete must schedule only recently created own messages observed after Enable, never messages loaded when entering an old channel or while backfilling history. Unknown creation timestamps are skipped rather than guessed. Test in an empty/disposable channel before using it elsewhere.

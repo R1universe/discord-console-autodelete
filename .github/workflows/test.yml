@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Generated files match single source
+        run: node scripts/build.js --check
       - name: Syntax validation
         run: node --check autodelete.js
       - name: Mocked runtime and UI tests
