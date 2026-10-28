@@ -349,7 +349,7 @@ function createEnvironment(options = {}) {
   // A newer paste stops old code; a same-version paste only reopens the window.
   const sameVersion = createEnvironment();
   let sameOpened = 0;
-  sameVersion.window.DiscordAutoDelete = { version: "3.21.0", open() { sameOpened++; } };
+  sameVersion.window.DiscordAutoDelete = { version: "3.22.0", open() { sameOpened++; } };
   vm.runInContext(source, sameVersion.context, { timeout: 3000 });
   assert.equal(sameOpened, 1, "Same version reopens without duplicate instance");
   const oldVersion = createEnvironment();
@@ -361,7 +361,7 @@ function createEnvironment(options = {}) {
   };
   vm.runInContext(source, oldVersion.context, { timeout: 3000 });
   assert.equal(previousStopped, 1, "Old instance is stopped");
-  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.21.0", "New controller version");
+  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.22.0", "New controller version");
   assert.equal(oldVersion.window.DiscordAutoDelete.running, false, "Upgrade starts paused");
   oldVersion.window.DiscordAutoDelete.stop();
 
@@ -407,7 +407,7 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
 
   // v3.15: a draggable minimized status window and retained v3.14 features.
-  assert.match(source, /AutoDelete <span class="version">v3\.21<\/span>/);
+  assert.match(source, /AutoDelete <span class="version">v3\.22<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -1161,6 +1161,43 @@ function createEnvironment(options = {}) {
   assert.equal(firstApi.status().pending, 1, "Fresh message is recovered on first cache observation");
   assert.ok(firstApi.status().ageRejected >= 1, "Historical message is rejected based on creation time");
   firstApi.stop();
+
+  // Live regression: local SENDING -> confirmed SENT arrives with a 24-second
+  // discord server clock offset, as observed in the console v3.21 screenshot.
+  // Its real nonce proves it came from this session after Enable; do not
+  // remove arbitrary historical messages that have no such proof.
+  const skewed = createEnvironment({ withMessageStore: true });
+  vm.runInContext(source, skewed.context, { timeout: 3000 });
+  const skewedApi = skewed.window.DiscordAutoDelete;
+  skewedApi.resume();
+  const skewedNonce = "844444444444444441";
+  const olderId = String((BigInt(Date.now() - 24000 - 1420070400000) << 22n) + 111n);
+  const ancientId = String((BigInt(Date.now() - 3600000 - 1420070400000) << 22n) + 333n);
+  const skewedBase = { author: { id: skewed.account.id },
+    channel_id: "444444444444444444", guild_id: "222222222222222222" };
+  skewed.emit({ ...skewedBase, id: skewedNonce, nonce: skewedNonce,
+    state: "SENDING", timestamp: "unparseable", optimistic: true }, { optimistic: true });
+  assert.equal(skewedApi.status().pending, 0, "Do not delete provisional sending message");
+  skewed.emit({ ...skewedBase, id: olderId, nonce: skewedNonce,
+    timestamp: new Date(Date.now() - 24000).toISOString(), state: "SENT",
+    optimistic: false }, { optimistic: false });
+  assert.equal(skewedApi.status().pending, 1,
+    "A confirmed locally initiated send survives a 24s clock discrepancy");
+  assert.equal(skewedApi.status().nonceRecovered, 1,
+    "Recovery is attributable to a verified local send, not a broad time window");
+  assert.equal(skewedApi.status().ageRejected, 0);
+  assert.equal(skewedApi.status().requests, 0, "Minimum delay is still enforced");
+  assert.ok([...skewed.timers.values()][0].ms >= 10000);
+  skewed.emit({ ...skewedBase, id: ancientId,
+    timestamp: new Date(Date.now() - 3600000).toISOString(), state: "SENT",
+    optimistic: false }, { optimistic: false });
+  assert.equal(skewedApi.status().pending, 1,
+    "Old history without a matching freshly observed nonce stays protected");
+  skewed.emit({ ...skewedBase, id: olderId, nonce: skewedNonce,
+    timestamp: new Date(Date.now() - 24000).toISOString(), state: "SENT",
+    optimistic: false }, { optimistic: false });
+  assert.equal(skewedApi.status().pending, 1, "Duplicate confirmation does not add another job");
+  skewedApi.stop();
 
   // Safety regression: old messages must NEVER be eligible just because
   // channel switch/history hydration makes them visible in cache.
