@@ -29,7 +29,11 @@ function fakeElement() {
       this.dispatch("change", { target: this });
       this.dispatch("blur", { target: this });
     },
-    append() {}, appendChild() {}, replaceChildren() {},
+    children: [],
+    append(...nodes) { this.children.push(...nodes); },
+    appendChild(node) { this.children.push(node); return node; },
+    replaceChildren(...nodes) { this.children = [...nodes]; },
+    click() { this.dispatch("click"); },
     getBoundingClientRect() { return { left: 0, top: 0 }; },
     remove() { this.removed = true; },
     attachShadow() { return shadow; }
@@ -41,7 +45,7 @@ function createEnvironment(options = {}) {
   const ids = new Map();
   const messageContents = new Map();
   let overlayHost = null;
-  const scopeButtons = ["all", "servers", "dm"].map(scope => {
+  const scopeButtons = ["servers", "dm"].map(scope => {
     const btn = fakeElement();
     btn.dataset.scope = scope;
     return btn;
@@ -58,6 +62,7 @@ function createEnvironment(options = {}) {
     appendChild() {},
   };
   const documentEvents = new Map();
+  const sidebarLinks = [];
   const document = {
     body: { appendChild(node) {
       overlayHost = node;
@@ -71,10 +76,11 @@ function createEnvironment(options = {}) {
     createElement: fakeElement,
     querySelectorAll(selector) {
       if (selector === '[id^="message-content-"]') return [...messageContents.values()];
+      if (selector === 'a[href^="/channels/@me/"]') return sidebarLinks;
       throw new Error("Unexpected document selector: " + selector);
     },
-    addEventListener(type, fn) { documentEvents.set(type, fn); },
-    removeEventListener(type) { documentEvents.delete(type); }
+    addEventListener(type, fn) { if (!documentEvents.has(type)) documentEvents.set(type, new Set()); documentEvents.get(type).add(fn); },
+    removeEventListener(type, fn) { documentEvents.get(type)?.delete(fn); }
   };
   const stored = new Map(options.initialStorage ?? []);
   const localStorage = {
@@ -113,7 +119,9 @@ function createEnvironment(options = {}) {
   };
   const users = {
     getCurrentUser() { return account; },
-    getUser(id) { return id === account.id ? account : null; }
+    getUser(id) { return id === account.id ? account :
+      (options.withPrivateList && id === "111111111111111111" ?
+        { id, globalName: "Robert", username: "robertk" } : null); }
   };
   Object.setPrototypeOf(users, { constructor: { displayName: "UserStore" } });
   const deletions = [];
@@ -123,11 +131,13 @@ function createEnvironment(options = {}) {
   };
   const channels = {
     getChannel(id) {
-      if (id === "333333333333333333") return { id, type: 1 };
+      if (id === "333333333333333333") return { id, type: 1, recipients: ["111111111111111111"] };
+      if (id === "777777777777777777") return { id, type: 1 };
       if (id === "888888888888888888") return { id, type: 3 };
       return { id, type: 0, guild_id: "222222222222222222" };
     },
-    getChannels() { return {}; }
+    getChannels() { return {}; },
+    getDMFromUserId(id) { return id === "111111111111111111" ? "333333333333333333" : null; }
   };
   Object.setPrototypeOf(channels, { constructor: { displayName: "ChannelStore" } });
 
@@ -208,6 +218,9 @@ function createEnvironment(options = {}) {
         HTTP: rest
       } } }
     } : {}),
+    ...(options.withPrivateList ? { privateSort: { exports: { ps: {
+      getPrivateChannelIds() { return ["333333333333333333", "888888888888888888"]; }
+    } } } } : {}),
     ...(options.withMessageStore ? {
       five: { exports: { E: messageStore } },
       six: { exports: { F: selectedChannel } }
@@ -286,7 +299,9 @@ function createEnvironment(options = {}) {
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
     emitDelete: id => dispatcher.dispatch({ type: "MESSAGE_DELETE", id }),
     flushTimers, timers, deletions, calls, cached, restURLs, stored, scopeButtons,
-    proxyReads, tick: () => interval(), documentDispatch: (type, event) => documentEvents.get(type)?.(event)
+    proxyReads, tick: () => interval(), documentDispatch: (type, event) => {
+      for (const fn of documentEvents.get(type) ?? []) fn(event);
+    }, sidebarLinks
   };
 }
 
@@ -418,7 +433,10 @@ function createEnvironment(options = {}) {
   assert.doesNotMatch(source, /id="ad-state"|id="ad-dot"|id="ad-next"/,
     "Redundant status row and empty queue text are gone");
   assert.doesNotMatch(source, /<select id="ad-scope">/,
-    "Native select replaced with 3 buttons");
+    "Native select replaced with two independently toggleable buttons");
+  assert.doesNotMatch(source, /data-scope="all"|>Everywhere<\/button>/, "No Everywhere button");
+  assert.match(source, /id="ad-exclude-search"/, "Search field exists");
+  assert.match(source, /id="ad-diag-resize"/, "Custom drag handle exists");
   assert.match(source, /class="scope-switch" role="group"/,
     "Scope segmented control remains labelled");
   const toggleIndex = source.indexOf('id="ad-toggle"');
@@ -452,25 +470,21 @@ function createEnvironment(options = {}) {
   assert.ok(!panel.classList.contains("is-active"), "Default paused panel stays black");
   assert.ok(!panel.classList.contains("is-error"), "No false error glow");
   const scope = e.scopeButtons;
-  assert.equal(scope.length, 3);
-  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
-    ["true","false","false"], "Everywhere default has a single active scope");
-  scope[1].dispatch("click");
-  assert.equal(api.status().scope, "servers", "Clicking Servers changes scope");
-  assert.equal(dmBlock.style.display, "none", "Servers hides DM timing");
-  assert.equal(serverBlock.style.display, "", "Servers shows server timing");
-  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
-    ["false","true","false"], "Selected scope is visually and accessibly exclusive");
-  scope[2].dispatch("click");
-  assert.equal(api.status().scope, "dm", "Clicking DMs changes scope");
-  assert.equal(dmBlock.style.display, "", "DMs shows DM timing");
-  assert.equal(serverBlock.style.display, "none", "DMs hides server timing");
-  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")),
-    ["false","false","true"]);
+  assert.equal(scope.length, 2);
+  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")), ["true", "true"]);
   scope[0].dispatch("click");
-  assert.equal(api.status().scope, "all", "Everywhere can be reselected");
-  assert.equal(dmBlock.style.display, "", "Everywhere restores DM timing");
-  assert.equal(serverBlock.style.display, "", "Everywhere restores server timing");
+  assert.equal(api.status().scope, "dm", "Servers toggles off");
+  assert.deepEqual(scope.map(btn => btn.getAttribute("aria-pressed")), ["false", "true"]);
+  assert.equal(serverBlock.style.display, "", "Server settings remain visible");
+  scope[1].dispatch("click");
+  assert.equal(api.status().scope, "dm", "Cannot disable final selected source");
+  scope[0].dispatch("click");
+  assert.equal(api.status().scope, "all", "Both areas can be active together");
+  scope[1].dispatch("click");
+  assert.equal(api.status().scope, "servers", "DM toggles off");
+  assert.equal(dmBlock.style.display, "", "DM settings remain visible");
+  scope[1].dispatch("click");
+  assert.equal(api.status().scope, "all", "DM toggles back on");
   assert.match(source, /\.panel\.is-active\{[^"\n]*--ad-accent:#35c878/,
     "Active state uses green tokens, not an always-green palette");
   assert.match(source, /\.panel\.is-active \.primary\{/,
@@ -518,7 +532,7 @@ function createEnvironment(options = {}) {
   api.setDelay(30);
   api.setScope("dm");
   assert.equal(dmBlock.style.display, "", "Programmatic setScope shows relevant DM control");
-  assert.equal(serverBlock.style.display, "none", "Programmatic setScope hides irrelevant server control");
+  assert.equal(serverBlock.style.display, "", "Both settings stay editable under DM scope");
   api.setDmDelay(45);
   assert.equal(api.status().serverDelaySeconds, 30, "Hidden server delay retains its own value");
   assert.equal(api.status().dmDelaySeconds, 45, "DM delay remains independently editable");
@@ -959,6 +973,49 @@ function createEnvironment(options = {}) {
   pickerEnv.ids.get("ad-exclude-servers").dispatch("click");
   assert.equal(pickerEnv.ids.get("ad-picker").hidden, true, "Server picker closes");
   pickerEnv.window.DiscordAutoDelete.stop();
+
+  // Only open DM channels appear; username lookup and filtering use real IDs.
+  const pickerNames = createEnvironment({ withPrivateList: true });
+  vm.runInContext(source, pickerNames.context, { timeout: 3000 });
+  pickerNames.ids.get("ad-exclude-dm").dispatch("click");
+  const list = pickerNames.ids.get("ad-picker-list");
+  assert.equal(list.children.length, 2, "Opened DMs, not whole historical cache");
+  assert.match(list.children.map(row => row.children[1]?.textContent).join("|"), /Robert \(@robertk\)/);
+  assert.doesNotMatch(list.children.map(row => row.title).join("|"), /777777777777777777/,
+    "Stale private DM does not appear");
+  const search = pickerNames.ids.get("ad-exclude-search");
+  search.value = "rober";
+  search.dispatch("input");
+  assert.equal(list.children.length, 1, "Search filters by username");
+  assert.match(list.children[0].children[1].textContent, /robertk/);
+  let stopped = 0, prevented = 0;
+  search.dispatch("keydown", { key: "Backspace", stopPropagation() { stopped++; },
+    preventDefault() { prevented++; } });
+  const manual = pickerNames.ids.get("ad-exclude-id");
+  manual.value = "111111111111111111";
+  manual.dispatch("keydown", { key: "Backspace", stopPropagation() { stopped++; },
+    preventDefault() { prevented++; } });
+  assert.equal(stopped, 2, "Discord shortcut handling stopped in both fields");
+  assert.equal(prevented, 0, "Backspace remains editable");
+  pickerNames.ids.get("ad-add-exclude").dispatch("click");
+  assert.equal(pickerNames.window.DiscordAutoDelete.status().excludedDms, 1,
+    "Existing recipient user ID resolves to the DM channel");
+  pickerNames.window.DiscordAutoDelete.stop();
+
+  // Diagnostics expands via pointer dragging and persists user-selected height.
+  const resizeEnv = createEnvironment();
+  vm.runInContext(source, resizeEnv.context, { timeout: 3000 });
+  const handle = resizeEnv.ids.get("ad-diag-resize");
+  const logView = resizeEnv.ids.get("ad-logs");
+  assert.equal(logView.style.height, "170px");
+  handle.dispatch("pointerdown", { clientY: 200, button: 0, preventDefault() {}, stopPropagation() {} });
+  resizeEnv.documentDispatch("pointermove", { clientX: 0, clientY: 288 });
+  assert.equal(logView.style.height, "270px", "Dragging down grows log area");
+  resizeEnv.documentDispatch("pointerup", {});
+  assert.equal(JSON.parse(resizeEnv.stored.get("discord-autodelete-ui-v2")).diagnosticsHeight, 270);
+  handle.dispatch("keydown", { key: "ArrowUp", preventDefault() {}, stopPropagation() {} });
+  assert.equal(logView.style.height, "246px", "Arrow keys also resize");
+  resizeEnv.window.DiscordAutoDelete.stop();
 
   // Exclusions are persistent, but deletion is always disabled after reload.
   const remembered = createEnvironment({ initialStorage: [
