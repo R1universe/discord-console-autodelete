@@ -25,7 +25,9 @@ for (const item of ["autodelete.js", "QA_TEST_PLAN.md", "docs/RELEASE_HISTORY.md
 }
 assert.match(en, /Discord prohibits/i, "Self-bot risk visible in current README");
 assert.match(en, /Not a guaranteed server-confirmed total/i, "Counters do not overstate deletion success");
-assert.match(en, /Excluded DMs \/ Excluded Servers/i, "New exclusion selectors explained");
+assert.match(en, /Each category has its own \*\*Excluded\*\* picker/i, "Short Excluded selectors explained");
+assert.match(en, /Resizable Diagnostics/i, "Adjustable diagnostic log documented");
+assert.match(en, /independent switches/i, "Server and DM selection documented");
 assert.match(en, /\*\*v3\.15 · Experimental/, "Current prototype version documented");
 assert.match(en, /Draggable mini dashboard/, "Compact draggable live status is documented");
 assert.match(en, /DiscordAutoDelete\.minimize\(\)/, "New minimize console command is documented");
