@@ -55,26 +55,41 @@
     }
     return NaN;
   }
+  function snowflakeCreatedAt(id) {
+    if (!validId(id)) return NaN;
+    try { return Number((BigInt(String(id)) >> 22n) + 1420070400000n); }
+    catch { return NaN; }
+  }
   function messageCreatedAt(msg) {
     for (const value of [msg?.timestamp, msg?.created_at, msg?.createdAt]) {
       const ms = normalizeUnixTime(value);
       if (Number.isFinite(ms)) return ms;
     }
-    // When timestamp metadata is missing, use Discord's snowflake creation time.
-    const id = String(msg?.id ?? "");
-    if (!validId(id)) return NaN;
-    try { return Number((BigInt(id) >> 22n) + 1420070400000n); }
-    catch { return NaN; }
+    return snowflakeCreatedAt(msg?.id);
   }
   function newSinceEnabled(msg, channelId, fromCache) {
+    if (!state.enabledSince) return false;
     const created = messageCreatedAt(msg);
-    if (!Number.isFinite(created) || !state.enabledSince) return false;
-    // Cache hydration can occur after a newly sent message. The message's
-    // actual creation time (not the channel cache's first observation) is
-    // the authoritative safety boundary.
     const boundary = state.enabledSince;
-    return created >= boundary - CREATION_SKEW_MS &&
-      created <= Date.now() + MAX_FUTURE_CLOCK_SKEW_MS;
+    const now = Date.now();
+    const recent = ms => Number.isFinite(ms) &&
+      ms >= boundary - CREATION_SKEW_MS &&
+      ms <= now + MAX_FUTURE_CLOCK_SKEW_MS;
+    if (recent(created)) return true;
+    // Confirmed Discord message IDs encode server creation time. A new ID
+    // can recover a stale/inconsistent optional timestamp field; old IDs
+    // never become eligible merely because old history was reloaded.
+    const fromId = snowflakeCreatedAt(msg?.id);
+    if (recent(fromId)) {
+      state.telemetry.snowflakeRecovered++;
+      return true;
+    }
+    state.telemetry.lastAgeRejectionReason =
+      !Number.isFinite(created) ? "missing_timestamp_and_id" :
+      created < boundary - CREATION_SKEW_MS ? "older_than_enable" : "future_timestamp";
+    state.telemetry.lastRejectedAgeSeconds =
+      Number.isFinite(created) ? Math.round((now - created) / 1000) : null;
+    return false;
   }
   // Space out expirations: Discord can rate-limit simultaneous deletions.
   const DELETE_SPACING_MS = 1400;
@@ -350,7 +365,8 @@
     provisional.clear();
     state.enabledSince = Date.now();
     state.telemetry = { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0,
-      ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0 };
+      ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0,
+      snowflakeRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null };
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();
