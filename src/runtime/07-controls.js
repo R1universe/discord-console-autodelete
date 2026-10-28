@@ -177,6 +177,9 @@
         cacheCandidates: state.telemetry.cacheCandidates,
         confirmedScheduled: state.telemetry.confirmed,
         ageRejected: state.telemetry.ageRejected,
+        snowflakeRecovered: state.telemetry.snowflakeRecovered,
+        lastAgeRejectionReason: state.telemetry.lastAgeRejectionReason,
+        lastRejectedAgeSeconds: state.telemetry.lastRejectedAgeSeconds,
         invalidChannel: state.telemetry.invalidChannel,
         lastOwnEventAt: state.telemetry.lastOwnEventAt ?
           new Date(state.telemetry.lastOwnEventAt).toLocaleTimeString() : "none",
