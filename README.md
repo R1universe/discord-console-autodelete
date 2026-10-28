@@ -43,12 +43,14 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 
 - **Live self-destruct timer:** automatically queue an attempted deletion for each detected, newly sent message by your account.
 - **Separate DM and server delays:** any whole number from **1 to 86,400 seconds (24 hours)**, with manual per-category entry and an exclusion picker; no fixed-delay presets.
-- **Choose where:** **Everywhere / Servers / DMs** (including group DMs when channel classification is available). **Excluded DMs / Excluded Servers** let you protect specific conversations and entire servers from auto-deletion; exclusions persist locally.
+- **Choose where:** **Servers and DMs are independent switches** (both can be enabled, or either alone; at least one remains selected). Each category has its own **Excluded** picker to protect individual DMs or servers; exclusions persist locally.
 - **In-Discord glass dashboard:** floating and draggable UI, color-coded disabled/enabled states, timer controls and collapsible diagnostics.
 - **No manual token entry or token scraping:** uses Discord's internal authenticated `RestAPI.del()` or `MessageActions.deleteMessage()` when discoverable.
 - **Inline expiry indicators:** a live timer appears next to each visible, newly sent message in Discord DMs and servers; it disappears after an attempt or cancellation. No message text is read or stored.
 - **Honest counters:** **Queued / Deleted**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted. Caught errors are recorded in Diagnostics rather than shown as a counter.
 - **Draggable mini dashboard:** **Minimize (−)** collapses the full overlay to a **same-width, shorter status window** (both modes are scaled down by 12%) showing live **Queued / Deleted** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
+- **DM exclusion search:** uses Discord’s available list of opened private channels and the sidebar, displays names from UserStore with username where available, and filters by name or ID. Manual entry accepts an existing DM channel ID or a recipient user ID that resolves to an existing DM. It does not enumerate all past conversations.
+- **Resizable Diagnostics:** drag the horizontal handle downward to show more log entries, or use Up/Down on the focused handle. The preferred height persists.
 - **Local preferences:** delays, scope, and excluded DM/server IDs are remembered in the browser; **the script starts disabled on every fresh load**.
 
 ## Quick start — Discord Web console
@@ -56,7 +58,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 1. **Review the complete [`autodelete.js`](./autodelete.js) source first.** Never execute untrusted code in an authenticated browser console.
 2. Open [Discord Web](https://discord.com/app). Open the developer console: **Chrome on macOS** `Cmd + Option + J`; **Chrome on Windows/Linux** `Ctrl + Shift + J`.
 3. Copy the reviewed `autodelete.js` source into the console and run it. No npm, Python, userscript extension or separate desktop application is required.
-4. In the dashboard, select **Everywhere / Servers / DMs** and set the deletion delays. To keep particular conversations, open **Excluded DMs** / **Excluded Servers**, select entries, choose **Exclude currently open**, or enter an ID if the Discord client cannot enumerate every location. Press **Enable**.
+4. In the dashboard, enable **Servers**, **DMs**, or both and set the deletion delays. To protect a conversation, open its category’s **Excluded** picker, search by username or ID, select a result, choose **Exclude currently open**, or enter an existing DM channel/user ID when needed. Press **Enable**.
 5. Send a harmless new message in a test conversation and observe the **live expiry countdown beside the message**. Use **Disable** to stop monitoring and cancel pending timers.
 
 **Never share your Discord token, cookies or authorization headers.** Do not run unreviewed remote loaders such as `fetch(...).then(eval)`.
@@ -78,7 +80,7 @@ For a Discord Canary desktop installation with [BetterDiscord](https://betterdis
 DiscordAutoDelete.status()            // Status and diagnostics summary
 DiscordAutoDelete.setDmDelay(4)        // DM timer: 4 seconds
 DiscordAutoDelete.setServerDelay(60)   // Server timer: 60 seconds
-DiscordAutoDelete.setScope("all")      // "all", "servers", or "dm"
+DiscordAutoDelete.setScope("all")      // "all" = both on; also "servers" or "dm"
 DiscordAutoDelete.excludeDm("DM_CHANNEL_ID")       // Keep a DM out of auto-delete
 DiscordAutoDelete.excludeServer("GUILD_ID")       // Keep an entire server
 DiscordAutoDelete.excludeDm("DM_CHANNEL_ID", false) // Undo the DM exclusion
@@ -113,7 +115,7 @@ Caught errors are reported in the **Diagnostics** activity log and remain availa
 - **Not instant, guaranteed or truly ephemeral.** A 1-second setting is a target delay after detection, not a guarantee that Discord will remove the message in one second. Other participants can preserve messages before deletion.
 - **Not a message-history cleaner.** The script does not automatically erase messages sent before you enable it.
 - **Unofficial and fragile.** Discord can change undocumented Webpack exports, event handling or deletion methods at any time.
-- **Limited fallback coverage.** Cache-only monitoring observes the currently open channel, **not every server and DM globally**. Listing all available DMs and servers for exclusion also depends on the runtime. Use **Exclude current** or manually enter a channel/server ID if the list is incomplete.
+- **Limited fallback coverage.** Cache-only monitoring observes the currently open channel, **not every server and DM globally**. The DM picker prefers Discord’s active private-channel list and currently rendered sidebar, so archived/closed DMs may not appear. Store APIs and sidebar markup can vary between Discord versions. Use **Exclude current** or a known channel/user ID if a chat is missing.
 - **Browser-tab lifecycle.** Refreshing the page stops the script and loses its pending timers. **Disable** also cancels timers; **minimizing the UI does not**. Mini-window position lasts only for the current browser page session.
 - **Not a privacy or security guarantee.** This does not provide end-to-end disappearing-message protection.
 - **Discord's [self-bot policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots)** prohibits automating normal user accounts. Account sanctions are possible. An officially supported alternative for permitted use cases is the [Discord bot API](https://discord.com/developers/docs/intro).
