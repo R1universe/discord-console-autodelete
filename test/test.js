@@ -98,18 +98,29 @@ function createEnvironment(options = {}) {
     },
     unsubscribe(name, fn) { subscribers.get(name)?.delete(fn); },
     dispatch({ type, ...event }) {
+      // Mock sends model a freshly created Discord message unless a test
+      // explicitly supplies an old timestamp.
+      if (event.message && event.message.timestamp == null)
+        event.message.timestamp = new Date().toISOString();
       for (const fn of subscribers.get(type) ?? []) fn(event);
     }
   };
   const account = { id: "123456789012345678" };
   const cached = [];
+  cached.push = function (...messages) {
+    for (const message of messages)
+      if (message.timestamp == null) message.timestamp = new Date().toISOString();
+    return Array.prototype.push.apply(this, messages);
+  };
+  let selectedChannelId = "444444444444444444";
   const messageStore = {
-    getMessages() { return { _array: cached }; },
+    getMessages(channel) { return { _array: cached.filter(m =>
+      String(m.channel_id ?? m.channelId ?? selectedChannelId) === String(channel)) }; },
     getMessage(_channelId, msgId) { return cached.find(m => m.id === msgId); }
   };
   Object.setPrototypeOf(messageStore, { constructor: { displayName: "MessageStore" } });
   const selectedChannel = {
-    getChannelId() { return "444444444444444444"; }
+    getChannelId() { return selectedChannelId; }
   };
   Object.setPrototypeOf(selectedChannel, { constructor: { displayName: "SelectedChannelStore" } });
   const restURLs = [];
@@ -306,7 +317,8 @@ function createEnvironment(options = {}) {
       if (target) target.isConnected = false;
       messageContents.delete(String(id));
     },
-    post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
+    post, selectChannel(id) { selectedChannelId = String(id); },
+    emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
     emitDelete: id => dispatcher.dispatch({ type: "MESSAGE_DELETE", id }),
     emitUpdate: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_UPDATE", message, ...extra }),
     flushTimers, timers, deletions, calls, cached, restURLs, stored, scopeButtons,
@@ -1065,6 +1077,46 @@ function createEnvironment(options = {}) {
   assert.equal(logView.style.height, "271px", "Viewport limit does not oscillate while dragging");
   resizeEnv.documentDispatch("pointerup", {});
   resizeEnv.window.DiscordAutoDelete.stop();
+
+
+  // Safety regression: old messages must NEVER be eligible just because
+  // channel switch/history hydration makes them visible in cache.
+  const history = createEnvironment({ withoutDispatcher: true, withMessageStore: true, withRestOnly: true });
+  vm.runInContext(source, history.context, { timeout: 3000 });
+  const historyApi = history.window.DiscordAutoDelete;
+  historyApi.resume();
+  const oldTimestamp = new Date(Date.now() - 3600_000).toISOString();
+  const ownOld = id => ({ id, timestamp: oldTimestamp,
+    author: { id: history.account.id }, channel_id: "555555555555555555",
+    guild_id: "222222222222222222", state: "SENT" });
+  history.selectChannel("555555555555555555");
+  history.cached.push(ownOld("666666666666666661"));
+  history.tick(); // First view establishes a baseline.
+  history.cached.push(ownOld("666666666666666662"));
+  history.tick(); // Delayed history hydration must not be scheduled.
+  assert.equal(historyApi.status().pending, 0, "Old history never enters pending queue");
+  assert.equal(history.timers.size, 0, "No deletion timers are created for backfilled history");
+  const currentFreshId = "666666666666666663";
+  history.cached.push({ ...ownOld(currentFreshId), timestamp: new Date().toISOString() });
+  history.tick();
+  assert.equal(historyApi.status().pending, 1, "New cache message after baseline is detected");
+  historyApi.pause();
+  assert.equal(historyApi.status().pending, 0);
+  historyApi.stop();
+
+  // Dispatcher history replay is rejected too; this covers events in addition
+  // to cache polling, and a live send remains eligible.
+  const older = createEnvironment();
+  vm.runInContext(source, older.context, { timeout: 3000 });
+  const olderApi = older.window.DiscordAutoDelete;
+  olderApi.resume();
+  older.emit({ id: "666666666666666664", timestamp: oldTimestamp,
+    author: { id: older.account.id }, channel_id: "444444444444444444",
+    guild_id: "222222222222222222", state: "SENT" });
+  assert.equal(olderApi.status().pending, 0, "Historical create event is rejected");
+  older.post("666666666666666665");
+  assert.equal(olderApi.status().pending, 1, "New own message still gets scheduled");
+  olderApi.stop();
 
   // Flood regression: the original code would fire DELETEs simultaneously.
   // Every confirmed own message should be queued exactly once with paced slots.
