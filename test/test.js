@@ -991,9 +991,9 @@ function createEnvironment(options = {}) {
   let stopped = 0, prevented = 0;
   search.dispatch("keydown", { key: "Backspace", stopPropagation() { stopped++; },
     preventDefault() { prevented++; } });
-  const manual = pickerNames.ids.get("ad-exclude-id");
-  manual.value = "111111111111111111";
-  manual.dispatch("keydown", { key: "Backspace", stopPropagation() { stopped++; },
+  const manualIdInput = pickerNames.ids.get("ad-exclude-id");
+  manualIdInput.value = "111111111111111111";
+  manualIdInput.dispatch("keydown", { key: "Backspace", stopPropagation() { stopped++; },
     preventDefault() { prevented++; } });
   assert.equal(stopped, 2, "Discord shortcut handling stopped in both fields");
   assert.equal(prevented, 0, "Backspace remains editable");
