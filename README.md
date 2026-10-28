@@ -12,7 +12,7 @@
   <img src="assets/autodelete-active.webp" alt="Previous AutoDelete v3.13 interface, before the v3.14 exclusion picker and Deleted counter" width="350">
 </p>
 
-<p align="center"><sub>Previous v3.13 interface · v3.16 adds paced burst deletion, independent scope switches and a draggable compact status view; current builds show inline message countdowns</sub></p>
+<p align="center"><sub>Previous v3.13 interface · v3.17 adds a narrower aligned layout and bottom-edge Diagnostics resizing alongside paced burst deletion, independent scope switches and a draggable compact status view; current builds show inline message countdowns</sub></p>
 
 > [!WARNING]
 > **Experimental, unofficial Discord self-bot automation.** Discord prohibits automating regular user accounts; using this script can result in account restrictions or termination. The tool does **not guarantee** that a message will disappear at the requested time, or that it was not read, copied, saved or logged beforehand. Not affiliated with Discord.
@@ -51,9 +51,10 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 - **Version-aware reload:** pasting the updated script stops an older in-page instance (cancels its pending timers) and starts the new build disabled.
 - **Inline expiry indicators:** a live timer appears next to each visible, newly sent message in Discord DMs and servers; it disappears after an attempt or cancellation. No message text is read or stored.
 - **Honest counters:** **Queued / Deleted**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted. Caught errors are recorded in Diagnostics rather than shown as a counter.
+- **Narrower, aligned controls:** full and minimized panels are each 344px before the retained 88% UI zoom (about 303px on-screen); Excluded buttons now match the custom delay inputs in height and font size.
 - **Draggable mini dashboard:** **Minimize (−)** collapses the full overlay to a **same-width, shorter status window** (both modes are scaled down by 12%) showing live **Queued / Deleted** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
 - **DM exclusion search:** uses Discord’s available list of opened private channels and the sidebar, displays names from UserStore with username where available, and filters by name or ID. Manual entry accepts an existing DM channel ID or a recipient user ID that resolves to an existing DM. It does not enumerate all past conversations.
-- **Resizable Diagnostics:** drag the horizontal handle downward to show more log entries, or use Up/Down on the focused handle. The preferred height persists.
+- **Resizable Diagnostics:** expand the section, then drag its **bottom border** down to reveal more logs or up to shrink it. Arrow Up/Down also work on the focused bottom edge. The saved height respects the available screen space.
 - **Local preferences:** delays, scope, and excluded DM/server IDs are remembered in the browser; **the script starts disabled on every fresh load**.
 
 ## Quick start — Discord Web console
@@ -68,7 +69,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 
 ## Discord Canary desktop — BetterDiscord plugin (experimental)
 
-For a Discord Canary desktop installation with [BetterDiscord](https://betterdiscord.app/), install the standalone [`AutoDelete.plugin.js`](./AutoDelete.plugin.js). This is a separate packaging of the v3.16 console prototype; the original `autodelete.js` remains available.
+For a Discord Canary desktop installation with [BetterDiscord](https://betterdiscord.app/), install the standalone [`AutoDelete.plugin.js`](./AutoDelete.plugin.js). This is a separate packaging of the v3.17 console prototype; the original `autodelete.js` remains available.
 
 1. In BetterDiscord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
 2. Download the plugin from [GitHub](./AutoDelete.plugin.js) using **Download raw file**, and put `AutoDelete.plugin.js` in that folder.
@@ -125,7 +126,7 @@ Caught errors are reported in the **Diagnostics** activity log and remain availa
 
 ## Project status
 
-**v3.16 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
+**v3.17 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
 
 - [Source code](./autodelete.js)
 - [Manual QA test plan](./QA_TEST_PLAN.md)
