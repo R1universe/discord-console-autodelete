@@ -54,7 +54,7 @@
   const state = {
     ready: false, enabled: false, error: "", pending: new Map(),
     requests: 0, deleted: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(),
-    attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), nextDeletionAt: 0, monitor: "",
+    attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), cacheObservedSince: new Map(), enabledSince: 0, nextDeletionAt: 0, monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false
   };
   let ticker = null;
@@ -374,6 +374,8 @@
     state.pending.clear();
     state.nextDeletionAt = 0;
     provisional.clear();
+    state.enabledSince = 0;
+    state.cacheObservedSince.clear();
     render();
   }
 
@@ -622,6 +624,30 @@
     return msg.nonce != null && id === String(msg.nonce);
   }
 
+  // Fail closed: loaded history and cache hydration are NOT new outgoing messages.
+  // A message's creation timestamp, not its cache-discovery time, determines eligibility.
+  const CREATION_SKEW_MS = 2000;
+  function messageCreatedAt(msg) {
+    const value = msg?.timestamp ?? msg?.created_at ?? msg?.createdAt;
+    if (value != null) {
+      const parsed = typeof value === "number" ? value : Date.parse(String(value));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    // Discord snowflakes encode a server-side creation timestamp.
+    const id = String(msg?.id ?? "");
+    if (!validId(id)) return NaN;
+    try { return Number((BigInt(id) >> 22n) + 1420070400000n); }
+    catch { return NaN; }
+  }
+  function newSinceEnabled(msg, channelId, fromCache) {
+    const created = messageCreatedAt(msg);
+    if (!Number.isFinite(created) || !state.enabledSince) return false;
+    const boundary = fromCache ?
+      Math.max(state.enabledSince, state.cacheObservedSince.get(channelId) ?? state.enabledSince) :
+      state.enabledSince;
+    // Prevent backfilled history, future/invalid timestamps, and old edits.
+    return created >= boundary - CREATION_SKEW_MS && created <= Date.now() + CREATION_SKEW_MS;
+  }
   // Space out expirations: Discord can rate-limit simultaneous deletions.
   const DELETE_SPACING_MS = 1400;
   const MAX_RATE_LIMIT_RETRIES = 2;
@@ -713,6 +739,7 @@
     const msg = event?.message;
     if (!msg || String(msg.author?.id ?? "") !== state.accountId) return;
     const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
+    if (!validId(channelId) || !newSinceEnabled(msg, channelId, event?.fromCache === true)) return;
     if (isProvisional(msg, event)) {
       rememberProvisional(msg, channelId);
       return;
@@ -777,6 +804,7 @@
     if (!state.cacheSeen.has(channelId)) {
       // Establish a baseline instead of accidentally deleting old history.
       state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
+      state.cacheObservedSince.set(channelId, Date.now());
       return;
     }
     const seen = state.cacheSeen.get(channelId);
@@ -788,7 +816,7 @@
       if (isProvisional(msg)) continue;
       seen.add(id);
       if (String(msg.author?.id ?? "") === state.accountId)
-        onCreate({ message: msg, channelId });
+        onCreate({ message: msg, channelId, fromCache: true });
     }
     if (seen.size > 2500) {
       state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
@@ -796,9 +824,13 @@
   }
   function primeCache() {
     state.cacheSeen.clear();
+    state.cacheObservedSince.clear();
     try {
       const cache = cachedMessages();
-      if (cache) state.cacheSeen.set(cache.channelId, new Set(cache.items.map(m => String(m?.id ?? ""))));
+      if (cache) {
+        state.cacheSeen.set(cache.channelId, new Set(cache.items.map(m => String(m?.id ?? ""))));
+        state.cacheObservedSince.set(cache.channelId, Date.now());
+      }
     } catch {}
   }
 
@@ -870,6 +902,7 @@
     primeCache();
     state.nextDeletionAt = 0;
     provisional.clear();
+    state.enabledSince = Date.now();
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();
