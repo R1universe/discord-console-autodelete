@@ -1,8 +1,8 @@
 /**
  * @name AutoDelete
  * @author Archivarius
- * @description Discord AutoDelete v3.19 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
- * @version 3.19.0
+ * @description Discord AutoDelete v3.20 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
+ * @version 3.20.0
  * @source https://github.com/R1universe/discord-console-autodelete/blob/main/AutoDelete.plugin.js
  */
 
@@ -11,7 +11,7 @@
 "use strict";
 
 /*
- * Discord AutoDelete v3.19 — compact UI and bottom-edge log resizing
+ * Discord AutoDelete v3.20 — compact UI and bottom-edge log resizing
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -22,7 +22,7 @@ function launchAutoDelete() {
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.19.0";
+  const VERSION = "3.20.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -67,7 +67,8 @@ function launchAutoDelete() {
     ready: false, enabled: false, error: "", pending: new Map(),
     requests: 0, deleted: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(),
     attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), cacheObservedSince: new Map(), enabledSince: 0, nextDeletionAt: 0, monitor: "",
-    accountId: null, connected: null, recent: [], destroyed: false
+    accountId: null, connected: null, recent: [], destroyed: false,
+    telemetry: { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0, ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0 }
   };
   let ticker = null;
   let hooks = null;
@@ -193,7 +194,7 @@ function launchAutoDelete() {
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.19</span></h1><div class="brand-by">by Archivarius</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.20</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -669,9 +670,10 @@ function launchAutoDelete() {
   function newSinceEnabled(msg, channelId, fromCache) {
     const created = messageCreatedAt(msg);
     if (!Number.isFinite(created) || !state.enabledSince) return false;
-    const boundary = fromCache ?
-      Math.max(state.enabledSince, state.cacheObservedSince.get(channelId) ?? state.enabledSince) :
-      state.enabledSince;
+    // Cache hydration can occur after a newly sent message. The message's
+    // actual creation time (not the channel cache's first observation) is
+    // the authoritative safety boundary.
+    const boundary = state.enabledSince;
     return created >= boundary - CREATION_SKEW_MS &&
       created <= Date.now() + MAX_FUTURE_CLOCK_SKEW_MS;
   }
@@ -741,6 +743,7 @@ function launchAutoDelete() {
   }
   function onUpdate(event) {
     if (!state.enabled || !hooks || state.destroyed) return;
+    state.telemetry.updates++;
     const fromEvent = event?.message;
     const channelId = String(event?.channelId ?? event?.channel_id ??
       fromEvent?.channel_id ?? fromEvent?.channelId ?? "");
@@ -765,10 +768,23 @@ function launchAutoDelete() {
     if (!state.enabled || !hooks || state.destroyed) return;
     const msg = event?.message;
     if (!msg || String(msg.author?.id ?? "") !== state.accountId) return;
+    state.telemetry.ownEvents++;
+    state.telemetry.lastOwnEventAt = Date.now();
     const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
-    if (!validId(channelId) || !newSinceEnabled(msg, channelId, event?.fromCache === true)) return;
+    if (!validId(channelId)) {
+      state.telemetry.invalidChannel++;
+      return;
+    }
+    // Critical: an optimistic SENDING message may use a nonce as its ID
+    // and have no valid server timestamp. Remember it BEFORE age filtering,
+    // but never enqueue it until a confirmed message passes the age guard.
     if (isProvisional(msg, event)) {
+      state.telemetry.provisional++;
       rememberProvisional(msg, channelId);
+      return;
+    }
+    if (!newSinceEnabled(msg, channelId, event?.fromCache === true)) {
+      state.telemetry.ageRejected++;
       return;
     }
     const id = String(msg.id ?? "");
@@ -792,6 +808,7 @@ function launchAutoDelete() {
         state.processedNonces.delete(state.processedNonces.values().next().value);
     }
     state.detected++;
+    state.telemetry.confirmed++;
     const job = { id, channelId, guildId, kind, deadline: 0, timer: null, retries: 0 };
     state.pending.set(id, job);
     reserveDeletionSlot(job, delaySeconds * 1000);
@@ -829,10 +846,11 @@ function launchAutoDelete() {
     if (!cache) return;
     const { channelId, items } = cache;
     if (!state.cacheSeen.has(channelId)) {
-      // Establish a baseline instead of accidentally deleting old history.
-      state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
+      // On first visit, old history is rejected by message creation time.
+      // A just-sent message must not be lost merely because it arrived before
+      // the first cache poll (especially after navigating between channels).
+      state.cacheSeen.set(channelId, new Set());
       state.cacheObservedSince.set(channelId, Date.now());
-      return;
     }
     const seen = state.cacheSeen.get(channelId);
     for (const msg of items) {
@@ -842,8 +860,10 @@ function launchAutoDelete() {
       // message might transition to SENT without changing its ID.
       if (isProvisional(msg)) continue;
       seen.add(id);
-      if (String(msg.author?.id ?? "") === state.accountId)
+      if (String(msg.author?.id ?? "") === state.accountId) {
+        state.telemetry.cacheCandidates++;
         onCreate({ message: msg, channelId, fromCache: true });
+      }
     }
     if (seen.size > 2500) {
       state.cacheSeen.set(channelId, new Set(items.map(m => String(m?.id ?? ""))));
@@ -930,6 +950,8 @@ function launchAutoDelete() {
     state.nextDeletionAt = 0;
     provisional.clear();
     state.enabledSince = Date.now();
+    state.telemetry = { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0,
+      ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0 };
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();
@@ -1336,6 +1358,16 @@ function launchAutoDelete() {
         scope: config.scope,
         filteredProxyExports: hooks?.ignoredProxies ?? 0, pending: state.pending.size,
         requests: state.requests, deleted: state.deleted, failed: state.failed, skipped: state.skipped,
+        detected: state.detected,
+        ownEvents: state.telemetry.ownEvents,
+        provisionalEvents: state.telemetry.provisional,
+        updateEvents: state.telemetry.updates,
+        cacheCandidates: state.telemetry.cacheCandidates,
+        confirmedScheduled: state.telemetry.confirmed,
+        ageRejected: state.telemetry.ageRejected,
+        invalidChannel: state.telemetry.invalidChannel,
+        lastOwnEventAt: state.telemetry.lastOwnEventAt ?
+          new Date(state.telemetry.lastOwnEventAt).toLocaleTimeString() : "none",
         excludedDms: config.excludedDms.length, excludedServers: config.excludedGuilds.length,
         metricsNote: "deleted = observed MESSAGE_DELETE events after attempted calls; 0 can mean missing event coverage; requests are attempts only"
       };
