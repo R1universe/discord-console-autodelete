@@ -1,8 +1,8 @@
 /**
  * @name AutoDelete
  * @author Archivarius
- * @description Discord AutoDelete v3.20 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
- * @version 3.20.0
+ * @description Discord AutoDelete v3.21 panel for BetterDiscord. Manual Enable required. Unofficial user-account automation; account risk.
+ * @version 3.21.0
  * @source https://github.com/R1universe/discord-console-autodelete/blob/main/AutoDelete.plugin.js
  */
 
@@ -11,7 +11,7 @@
 "use strict";
 
 /*
- * Discord AutoDelete v3.20 — compact UI and bottom-edge log resizing
+ * Discord AutoDelete v3.21 — compact UI and bottom-edge log resizing
  * This is NOT a supported Discord API integration. Self-bots can result in bans.
  * No token extraction, credential access, external code or network requests.
  * Does not read, log or store the contents of messages.
@@ -22,7 +22,7 @@ function launchAutoDelete() {
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.20.0";
+  const VERSION = "3.21.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -68,7 +68,8 @@ function launchAutoDelete() {
     requests: 0, deleted: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(),
     attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), cacheObservedSince: new Map(), enabledSince: 0, nextDeletionAt: 0, monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false,
-    telemetry: { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0, ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0 }
+    telemetry: { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0, ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0,
+      snowflakeRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null }
   };
   let ticker = null;
   let hooks = null;
@@ -194,7 +195,7 @@ function launchAutoDelete() {
     '<section class="panel" id="ad-panel" role="region" aria-label="Discord AutoDelete controls">',
       '<div class="head" id="ad-head">',
         '<div class="top">',
-          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.20</span></h1><div class="brand-by">by Archivarius</div></div></div>',
+          '<div class="brand"><div class="brand-icon">◷</div><div><h1>AutoDelete <span class="version">v3.21</span></h1><div class="brand-by">by Archivarius</div></div></div>',
           '<div class="head-buttons"><button class="mini" id="ad-min" type="button" title="Minimize" aria-label="Minimize">−</button><button class="mini" id="ad-close" type="button" title="Stop and close" aria-label="Close">×</button></div>',
         '</div>',
       '</div>',
@@ -656,26 +657,41 @@ function launchAutoDelete() {
     }
     return NaN;
   }
+  function snowflakeCreatedAt(id) {
+    if (!validId(id)) return NaN;
+    try { return Number((BigInt(String(id)) >> 22n) + 1420070400000n); }
+    catch { return NaN; }
+  }
   function messageCreatedAt(msg) {
     for (const value of [msg?.timestamp, msg?.created_at, msg?.createdAt]) {
       const ms = normalizeUnixTime(value);
       if (Number.isFinite(ms)) return ms;
     }
-    // When timestamp metadata is missing, use Discord's snowflake creation time.
-    const id = String(msg?.id ?? "");
-    if (!validId(id)) return NaN;
-    try { return Number((BigInt(id) >> 22n) + 1420070400000n); }
-    catch { return NaN; }
+    return snowflakeCreatedAt(msg?.id);
   }
   function newSinceEnabled(msg, channelId, fromCache) {
+    if (!state.enabledSince) return false;
     const created = messageCreatedAt(msg);
-    if (!Number.isFinite(created) || !state.enabledSince) return false;
-    // Cache hydration can occur after a newly sent message. The message's
-    // actual creation time (not the channel cache's first observation) is
-    // the authoritative safety boundary.
     const boundary = state.enabledSince;
-    return created >= boundary - CREATION_SKEW_MS &&
-      created <= Date.now() + MAX_FUTURE_CLOCK_SKEW_MS;
+    const now = Date.now();
+    const recent = ms => Number.isFinite(ms) &&
+      ms >= boundary - CREATION_SKEW_MS &&
+      ms <= now + MAX_FUTURE_CLOCK_SKEW_MS;
+    if (recent(created)) return true;
+    // Confirmed Discord message IDs encode server creation time. A new ID
+    // can recover a stale/inconsistent optional timestamp field; old IDs
+    // never become eligible merely because old history was reloaded.
+    const fromId = snowflakeCreatedAt(msg?.id);
+    if (recent(fromId)) {
+      state.telemetry.snowflakeRecovered++;
+      return true;
+    }
+    state.telemetry.lastAgeRejectionReason =
+      !Number.isFinite(created) ? "missing_timestamp_and_id" :
+      created < boundary - CREATION_SKEW_MS ? "older_than_enable" : "future_timestamp";
+    state.telemetry.lastRejectedAgeSeconds =
+      Number.isFinite(created) ? Math.round((now - created) / 1000) : null;
+    return false;
   }
   // Space out expirations: Discord can rate-limit simultaneous deletions.
   const DELETE_SPACING_MS = 1400;
@@ -951,7 +967,8 @@ function launchAutoDelete() {
     provisional.clear();
     state.enabledSince = Date.now();
     state.telemetry = { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0,
-      ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0 };
+      ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0,
+      snowflakeRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null };
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();
@@ -1365,6 +1382,9 @@ function launchAutoDelete() {
         cacheCandidates: state.telemetry.cacheCandidates,
         confirmedScheduled: state.telemetry.confirmed,
         ageRejected: state.telemetry.ageRejected,
+        snowflakeRecovered: state.telemetry.snowflakeRecovered,
+        lastAgeRejectionReason: state.telemetry.lastAgeRejectionReason,
+        lastRejectedAgeSeconds: state.telemetry.lastRejectedAgeSeconds,
         invalidChannel: state.telemetry.invalidChannel,
         lastOwnEventAt: state.telemetry.lastOwnEventAt ?
           new Date(state.telemetry.lastOwnEventAt).toLocaleTimeString() : "none",
