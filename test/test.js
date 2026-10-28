@@ -268,7 +268,7 @@ function createEnvironment(options = {}) {
     }
   }
   return {
-    context, window, document, ids, get overlayHost() { return overlayHost; }, presets, localStorage, account,
+    context, window, document, ids, get overlayHost() { return overlayHost; }, localStorage, account,
     showMessage(id) {
       const target = fakeElement();
       target.id = "message-content-" + id;
