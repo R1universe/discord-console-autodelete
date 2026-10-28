@@ -349,7 +349,7 @@ function createEnvironment(options = {}) {
   // A newer paste stops old code; a same-version paste only reopens the window.
   const sameVersion = createEnvironment();
   let sameOpened = 0;
-  sameVersion.window.DiscordAutoDelete = { version: "3.18.0", open() { sameOpened++; } };
+  sameVersion.window.DiscordAutoDelete = { version: "3.19.0", open() { sameOpened++; } };
   vm.runInContext(source, sameVersion.context, { timeout: 3000 });
   assert.equal(sameOpened, 1, "Same version reopens without duplicate instance");
   const oldVersion = createEnvironment();
@@ -361,7 +361,7 @@ function createEnvironment(options = {}) {
   };
   vm.runInContext(source, oldVersion.context, { timeout: 3000 });
   assert.equal(previousStopped, 1, "Old instance is stopped");
-  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.18.0", "New controller version");
+  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.19.0", "New controller version");
   assert.equal(oldVersion.window.DiscordAutoDelete.running, false, "Upgrade starts paused");
   oldVersion.window.DiscordAutoDelete.stop();
 
@@ -407,7 +407,7 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
 
   // v3.15: a draggable minimized status window and retained v3.14 features.
-  assert.match(source, /AutoDelete <span class="version">v3\.18<\/span>/);
+  assert.match(source, /AutoDelete <span class="version">v3\.19<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -1079,6 +1079,35 @@ function createEnvironment(options = {}) {
   resizeEnv.documentDispatch("pointerup", {});
   resizeEnv.window.DiscordAutoDelete.stop();
 
+
+  // Client timestamp formats: seconds, numeric strings, Date/Moment
+  // objects, and a recent snowflake fallback must all allow NEW messages.
+  const variants = createEnvironment();
+  vm.runInContext(source, variants.context, { timeout: 3000 });
+  const variantsApi = variants.window.DiscordAutoDelete;
+  variantsApi.resume();
+  const newSnowflake = i => String((BigInt(Date.now() - 1420070400000) << 22n) + BigInt(i));
+  const timestamps = [
+    Math.floor(Date.now() / 1000),
+    String(Math.floor(Date.now() / 1000)),
+    { valueOf() { return Date.now(); }, toString() { return "not ISO"; } },
+    new Date(),
+    "not-a-date"
+  ];
+  for (let i = 0; i < timestamps.length; i++) {
+    variants.emit({ id: newSnowflake(i + 1), timestamp: timestamps[i],
+      author: { id: variants.account.id }, channel_id: "444444444444444444",
+      guild_id: "222222222222222222", state: "SENT" });
+    assert.equal(variantsApi.status().pending, i + 1,
+      "New messages with supported timestamp variant " + i + " are queued");
+  }
+  variants.emit({ id: newSnowflake(100),
+    timestamp: Math.floor((Date.now() - 3600_000) / 1000),
+    author: { id: variants.account.id }, channel_id: "444444444444444444",
+    guild_id: "222222222222222222", state: "SENT" });
+  assert.equal(variantsApi.status().pending, timestamps.length,
+    "Hour-old messages remain ineligible even when snowflake is recent");
+  variantsApi.stop();
 
   // Safety regression: old messages must NEVER be eligible just because
   // channel switch/history hydration makes them visible in cache.
