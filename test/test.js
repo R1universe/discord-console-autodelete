@@ -39,6 +39,7 @@ function fakeElement() {
 let shadow;
 function createEnvironment(options = {}) {
   const ids = new Map();
+  const messageContents = new Map();
   let overlayHost = null;
   const presets = ["servers", "dm"].flatMap(kind =>
     ["60"].map(delay => {
@@ -77,6 +78,10 @@ function createEnvironment(options = {}) {
       });
     } },
     createElement: fakeElement,
+    querySelectorAll(selector) {
+      if (selector === '[id^="message-content-"]') return [...messageContents.values()];
+      throw new Error("Unexpected document selector: " + selector);
+    },
     addEventListener(type, fn) { documentEvents.set(type, fn); },
     removeEventListener(type) { documentEvents.delete(type); }
   };
@@ -273,6 +278,20 @@ function createEnvironment(options = {}) {
   }
   return {
     context, window, document, ids, get overlayHost() { return overlayHost; }, presets, localStorage, account,
+    showMessage(id) {
+      const target = fakeElement();
+      target.id = "message-content-" + id;
+      target.isConnected = true;
+      target.children = [];
+      target.appendChild = node => { target.children.push(node); node.parentElement = target; };
+      messageContents.set(String(id), target);
+      return target;
+    },
+    hideMessage(id) {
+      const target = messageContents.get(String(id));
+      if (target) target.isConnected = false;
+      messageContents.delete(String(id));
+    },
     post, emit: (message, extra = {}) => dispatcher.dispatch({ type: "MESSAGE_CREATE", message, ...extra }),
     emitDelete: id => dispatcher.dispatch({ type: "MESSAGE_DELETE", id }),
     flushTimers, timers, deletions, calls, cached, restURLs, stored, presets, scopeButtons,
@@ -376,7 +395,9 @@ function createEnvironment(options = {}) {
     "Range helper removed per design");
   assert.doesNotMatch(source, /Your messages only/, "Scope helper removed");
   assert.match(source, /by Archivarius/, "Author credit");
-  assert.match(source, /id="ad-countdowns"/, "Live countdowns");
+  assert.doesNotMatch(source, /id="ad-countdowns"|function renderCountdowns|ACTIVITY LOG|No message text stored/,
+    "No timer list or redundant log heading in Diagnostics");
+  assert.match(source, /function renderInlineTimers\(\)/, "Countdowns now live beside messages");
   assert.doesNotMatch(source, /<div class="stat[^"]*"[^>]*><(?:svg|img|i)[\s>]/,
     "Stats markup remains icon-free");
   assert.match(source, /\.scope-switch\{[^"\n]*border:1px solid/,
@@ -868,6 +889,40 @@ function createEnvironment(options = {}) {
   split.stop();
 
   assert.equal(/[^\\x00-\\x7F]*Временные сообщения/.test(source), false, "English-first interface");
+
+  // Inline message clocks: own messages only, per-kind delays, cancel and remount.
+  const inlineEnv = createEnvironment();
+  vm.runInContext(source, inlineEnv.context, { timeout: 3000 });
+  const inlineApi = inlineEnv.window.DiscordAutoDelete;
+  inlineApi.setServerDelay(8);
+  inlineApi.setDmDelay(12);
+  const visibleServer = inlineEnv.showMessage("911111111111111111");
+  const visibleDm = inlineEnv.showMessage("922222222222222222");
+  const visibleForeign = inlineEnv.showMessage("933333333333333333");
+  inlineApi.resume();
+  inlineEnv.post("911111111111111111");
+  inlineEnv.post("922222222222222222", inlineEnv.account.id, "333333333333333333");
+  inlineEnv.post("933333333333333333", "999999999999999999");
+  assert.equal(visibleServer.children.length, 1, "Visible own server message gets timer");
+  assert.equal(visibleDm.children.length, 1, "Visible own DM gets timer");
+  assert.equal(visibleForeign.children.length, 0, "Other people's messages never get timers");
+  assert.match(visibleServer.children[0].textContent, /⏱ 8s/, "Server delay");
+  assert.match(visibleDm.children[0].textContent, /⏱ 12s/, "DM delay");
+  assert.match(visibleServer.children[0].title, /not guaranteed/, "Timer means attempt, not confirmation");
+  const formerDmBadge = visibleDm.children[0];
+  inlineApi.excludeDm("333333333333333333");
+  assert.equal(formerDmBadge.removed, true, "Exclude cancels and removes DM badge");
+  const formerServerBadge = visibleServer.children[0];
+  inlineEnv.hideMessage("911111111111111111");
+  inlineEnv.tick();
+  assert.equal(formerServerBadge.removed, true, "Recycling DOM releases badges");
+  const remounted = inlineEnv.showMessage("911111111111111111");
+  inlineEnv.tick();
+  assert.equal(remounted.children.length, 1, "Returning to message restores countdown");
+  inlineApi.pause();
+  assert.equal(remounted.children[0].removed, true, "Disable clears all message countdowns");
+  assert.equal(inlineApi.status().pending, 0);
+  inlineApi.stop();
 
   // v3.14 exclusion rules apply to existing and future jobs.
   const ex = createEnvironment();

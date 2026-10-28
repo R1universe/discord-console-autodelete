@@ -140,7 +140,6 @@
     ".picker-list{max-height:180px;overflow-y:auto;display:grid;gap:4px}.picker-option{display:flex;align-items:center;gap:8px;min-width:0;font-size:11px;padding:7px 6px;border:1px solid #ffffff19;border-radius:9px;overflow-wrap:anywhere}",
     ".picker-option input{accent-color:#35c878;flex:none}.picker-action{padding:9px 12px;margin:4px 0 7px;min-height:36px;width:100%;font-size:11px}",
     ".picker-input-row{display:flex;gap:7px;margin-top:8px}.picker-input-row input{min-width:0;width:100%;font-size:11px}.picker-input-row button{width:auto;white-space:nowrap;padding:8px 10px}",
-    ".countdowns{max-height:130px;overflow-y:auto;font-size:10px;font-family:ui-monospace,SFMono-Regular,monospace;color:#d4ecdf;line-height:1.7}.countdown-item{padding:2px 0}.countdown-item span{color:#8ff5c5;font-variant-numeric:tabular-nums}",
     /* Minimized, draggable frosted-glass status view. */
     ".mini-panel{position:relative;width:392px;max-width:calc(100vw - 24px);padding:14px 10px 11px;border:1px solid #b3ceff7b;border-radius:18px;background:radial-gradient(ellipse at 80% -20%,#7d9aff2b,transparent 78%),linear-gradient(150deg,#273251bd,#101824be);backdrop-filter:blur(25px) saturate(155%);-webkit-backdrop-filter:blur(25px) saturate(155%);box-shadow:inset 0 1px 0 #ffffff4e,0 12px 32px #0009,0 0 19px #6f7cff20;color:#eef1f4;cursor:grab;touch-action:none;user-select:none}",
     ".mini-panel.is-active{border-color:#9cffe099;background:radial-gradient(ellipse at 85% -25%,#4affe43a,transparent 78%),linear-gradient(155deg,#1c4943be,#0d2524c0);box-shadow:inset 0 1px 0 #ffffff66,0 12px 32px #0009,0 0 20px #40ffb93b}",
@@ -201,8 +200,6 @@
       '<div class="footer"><details class="diagnostics" id="ad-diagnostics">',
         '<summary>Diagnostics</summary>',
         '<div class="diag-body">',
-          '<div class="diag-title">ACTIVITY LOG <span class="hint">· No message text stored</span></div>',
-          '<div class="countdowns" id="ad-countdowns" aria-live="off"></div>',
           '<div class="loglist" id="ad-logs" aria-live="polite"></div>',
           '<button class="diag-action" type="button" id="ad-retry-foot">Reconnect modules</button>',
         '</div>',
@@ -249,27 +246,46 @@
     const m = Math.floor(s / 60), seconds = s % 60;
     return m + "m " + String(seconds).padStart(2, "0") + "s";
   }
-  function renderCountdowns() {
-    const target = el("ad-countdowns");
-    if (!target) return;
-    target.replaceChildren();
-    const jobs = [...state.pending.values()].sort((a,b) => a.deadline - b.deadline).slice(0, 8);
-    if (!jobs.length) return;
-    jobs.forEach((job, index) => {
-      const line = document.createElement("div");
-      line.className = "countdown-item";
-      const time = document.createElement("span");
-      time.textContent = formatRemaining(job.deadline - Date.now());
-      const prefix = document.createElement("span");
-      prefix.textContent = (job.kind === "dm" ? "DM" : "Server") + " #" + (index + 1) + " · deletion attempt in ";
-      line.append(prefix, time);
-      target.appendChild(line);
-    });
-    if (state.pending.size > jobs.length) {
-      const more = document.createElement("div");
-      more.className = "countdown-item";
-      more.textContent = "+ " + (state.pending.size - jobs.length) + " other pending timers";
-      target.appendChild(more);
+  // Render the countdown beside confirmed own messages, not inside Diagnostics.
+  // Discord virtualizes message DOM nodes; the existing 500ms tick reattaches badges.
+  // Only message IDs are consulted. No message content is read.
+  const inlineBadges = new Map();
+  function clearInlineBadge(id) {
+    const entry = inlineBadges.get(id);
+    if (!entry) return;
+    entry.badge.remove();
+    inlineBadges.delete(id);
+  }
+  function renderInlineTimers() {
+    for (const [id, entry] of inlineBadges) {
+      if (!state.pending.has(id) || entry.target.isConnected === false ||
+          entry.badge.parentElement !== entry.target) clearInlineBadge(id);
+    }
+    if (!state.pending.size) return;
+    const visible = document.querySelectorAll?.('[id^="message-content-"]') ?? [];
+    for (const target of visible) {
+      const id = String(target.id ?? "").slice("message-content-".length);
+      if (!validId(id)) continue;
+      const job = state.pending.get(id);
+      if (!job || target.isConnected === false) continue;
+      let entry = inlineBadges.get(id);
+      if (!entry || entry.target !== target) {
+        clearInlineBadge(id);
+        const badge = document.createElement("span");
+        badge.className = "discord-autodelete-inline-timer";
+        badge.style.cssText = "display:inline-flex;align-items:center;margin-inline-start:8px;" +
+          "padding:1px 6px;border:1px solid #82dbb37a;border-radius:6px;" +
+          "background:#123d32a8;color:#b7ffe0;font:600 11px/1.5 Inter,ui-sans-serif,Arial,sans-serif;" +
+          "white-space:nowrap;vertical-align:middle;pointer-events:none;user-select:none";
+        badge.setAttribute("aria-live", "off");
+        target.appendChild(badge);
+        entry = { target, badge };
+        inlineBadges.set(id, entry);
+      }
+      const remaining = formatRemaining(job.deadline - Date.now());
+      const label = "⏱ " + remaining;
+      if (entry.badge.textContent !== label) entry.badge.textContent = label;
+      entry.badge.title = "AutoDelete deletion attempt in " + remaining + " (not guaranteed)";
     }
   }
 
@@ -324,7 +340,7 @@
     el("ad-exclude-servers").textContent = "Excluded Servers (" + config.excludedGuilds.length + ") ›";
     el("ad-exclude-dm").setAttribute("aria-expanded", String(pickerKind === "dm"));
     el("ad-exclude-servers").setAttribute("aria-expanded", String(pickerKind === "servers"));
-    renderCountdowns();
+    renderInlineTimers();
     el("ad-failed").textContent = state.failed;
     el("ad-mini-queued").textContent = state.pending.size;
     el("ad-mini-deleted").textContent = state.deleted;

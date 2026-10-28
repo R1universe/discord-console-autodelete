@@ -12,7 +12,7 @@
   <img src="assets/autodelete-active.webp" alt="Previous AutoDelete v3.13 interface, before the v3.14 exclusion picker and Deleted counter" width="350">
 </p>
 
-<p align="center"><sub>Previous v3.13 interface · v3.15 adds exclusion pickers, live countdowns and a draggable compact status view</sub></p>
+<p align="center"><sub>Previous v3.13 interface · v3.15 adds exclusion pickers and a draggable compact status view; current builds show inline message countdowns</sub></p>
 
 > [!WARNING]
 > **Experimental, unofficial Discord self-bot automation.** Discord prohibits automating regular user accounts; using this script can result in account restrictions or termination. The tool does **not guarantee** that a message will disappear at the requested time, or that it was not read, copied, saved or logged beforehand. Not affiliated with Discord.
@@ -46,7 +46,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 - **Choose where:** **Everywhere / Servers / DMs** (including group DMs when channel classification is available). **Excluded DMs / Excluded Servers** let you protect specific conversations and entire servers from auto-deletion; exclusions persist locally.
 - **In-Discord glass dashboard:** floating and draggable UI, color-coded disabled/enabled states, timer controls and collapsible diagnostics.
 - **No manual token entry or token scraping:** uses Discord's internal authenticated `RestAPI.del()` or `MessageActions.deleteMessage()` when discoverable.
-- **Countdown diagnostics:** see the time remaining before each pending deletion attempt without showing message text or identifiers.
+- **Inline expiry indicators:** a live timer appears next to each visible, newly sent message in Discord DMs and servers; it disappears after an attempt or cancellation. No message text is read or stored.
 - **Honest counters:** **Queued / Deleted / Errors**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted.
 - **Draggable mini dashboard:** **Minimize (−)** collapses the full overlay to a **same-width, shorter status window** (both modes are scaled down by 12%) showing live **Queued / Deleted / Errors** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
 - **Local preferences:** delays, scope, and excluded DM/server IDs are remembered in the browser; **the script starts disabled on every fresh load**.
@@ -57,7 +57,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 2. Open [Discord Web](https://discord.com/app). Open the developer console: **Chrome on macOS** `Cmd + Option + J`; **Chrome on Windows/Linux** `Ctrl + Shift + J`.
 3. Copy the reviewed `autodelete.js` source into the console and run it. No npm, Python, userscript extension or separate desktop application is required.
 4. In the dashboard, select **Everywhere / Servers / DMs** and set the deletion delays. To keep particular conversations, open **Excluded DMs** / **Excluded Servers**, select entries, choose **Exclude currently open**, or enter an ID if the Discord client cannot enumerate every location. Press **Enable**.
-5. Send a harmless new message in a test conversation and observe the **live expiry countdown** in Diagnostics. Use **Disable** to stop monitoring and cancel pending timers.
+5. Send a harmless new message in a test conversation and observe the **live expiry countdown beside the message**. Use **Disable** to stop monitoring and cancel pending timers.
 
 **Never share your Discord token, cookies or authorization headers.** Do not run unreviewed remote loaders such as `fetch(...).then(eval)`.
 
@@ -104,7 +104,7 @@ DiscordAutoDelete.stop()               // Remove script UI and stop
 
 | Counter | Meaning |
 | --- | --- |
-| **Queued** | Message-deletion timers still pending; Diagnostics provides live remaining-time estimates for upcoming attempts |
+| **Queued** | Message-deletion timers still pending; visible messages have inline countdown badges until the attempt |
 | **Deleted** | Matching `MESSAGE_DELETE` events observed **after the tool attempted a deletion**. Not a guaranteed server-confirmed total; may be zero if these events are unavailable |
 | **Errors** | Errors the script catches; background failures may be missing |
 
