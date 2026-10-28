@@ -1197,7 +1197,12 @@ function launchAutoDelete() {
   logView.style.height = config.diagnosticsHeight + "px";
   resizeHandle.addEventListener("pointerdown", event => {
     if (event.button != null && event.button !== 0) return;
-    diagnosticsResize = { y: event.clientY, height: config.diagnosticsHeight };
+    const rect = el("ad-panel").getBoundingClientRect?.();
+    const room = Math.max(0, (window.innerHeight ?? 900) - 8 - (rect?.bottom ?? 0));
+    diagnosticsResize = {
+      y: event.clientY, height: config.diagnosticsHeight,
+      maxHeight: Math.min(520, config.diagnosticsHeight + room / 0.88)
+    };
     event.preventDefault?.();
     event.stopPropagation?.();
   });
@@ -1207,12 +1212,9 @@ function launchAutoDelete() {
   };
   const onDiagnosticsMove = event => {
     if (!diagnosticsResize) return;
-    // Keep the bottom border in view while increasing the log viewport.
-    const panel = el("ad-panel");
-    const rect = panel.getBoundingClientRect?.();
-    const room = Math.max(0, (window.innerHeight ?? 900) - 8 - (rect?.bottom ?? 0));
+    // A fixed drag-start limit prevents a jumping/oscillating bottom border.
     const requested = diagnosticsResize.height + (event.clientY - diagnosticsResize.y) / 0.88;
-    resizeTo(Math.min(requested, Math.max(100, diagnosticsResize.height + room / 0.88)));
+    resizeTo(Math.min(requested, diagnosticsResize.maxHeight));
   };
   const endDiagnosticsResize = () => { if (diagnosticsResize) { diagnosticsResize = null; save(); } };
   resizeHandle.addEventListener("keydown", event => {
