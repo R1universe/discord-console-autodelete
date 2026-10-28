@@ -326,15 +326,17 @@ function createEnvironment(options = {}) {
     const script = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
     assert.ok(script.includes('".ad-shell{zoom:.88}"'), file + " uses a consistent 12% smaller UI");
     assert.ok(script.includes('root.className = "ad-shell";'), file + " scales the entire UI");
-    assert.ok(script.includes('".panel{width:392px;max-width:calc(100vw - 24px);'), file + " retains the full panel width");
-    assert.ok(script.includes('".mini-panel{position:relative;width:392px;max-width:calc(100vw - 24px);'), file + " matches compact width");
+    assert.ok(script.includes('".panel{width:344px}.mini-panel{width:344px}'), file + " uses the narrower 344px full panel width");
+    assert.ok(script.includes('".panel{width:344px}.mini-panel{width:344px}'), file + " matches narrower minimized width");
     assert.ok(script.includes("#2d3857a1") && script.includes("#193c3aa3"), file + " softens normal and active full-panel glass");
     assert.ok(script.includes("#273251bd") && script.includes("#1c4943be"), file + " softens normal and active mini glass");
+    assert.ok(script.includes('.delay .value,.delay .exclude-btn{'), file + " harmonizes font metrics and control heights");
+    assert.ok(script.includes('.diag-bottom-resizer{'), file + " supports footer-edge resize styling");
   }
   // A newer paste stops old code; a same-version paste only reopens the window.
   const sameVersion = createEnvironment();
   let sameOpened = 0;
-  sameVersion.window.DiscordAutoDelete = { version: "3.16.0", open() { sameOpened++; } };
+  sameVersion.window.DiscordAutoDelete = { version: "3.17.0", open() { sameOpened++; } };
   vm.runInContext(source, sameVersion.context, { timeout: 3000 });
   assert.equal(sameOpened, 1, "Same version reopens without duplicate instance");
   const oldVersion = createEnvironment();
@@ -346,7 +348,7 @@ function createEnvironment(options = {}) {
   };
   vm.runInContext(source, oldVersion.context, { timeout: 3000 });
   assert.equal(previousStopped, 1, "Old instance is stopped");
-  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.16.0", "New controller version");
+  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.17.0", "New controller version");
   assert.equal(oldVersion.window.DiscordAutoDelete.running, false, "Upgrade starts paused");
   oldVersion.window.DiscordAutoDelete.stop();
 
@@ -392,7 +394,7 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
 
   // v3.15: a draggable minimized status window and retained v3.14 features.
-  assert.match(source, /AutoDelete <span class="version">v3\.16<\/span>/);
+  assert.match(source, /AutoDelete <span class="version">v3\.17<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
@@ -466,7 +468,11 @@ function createEnvironment(options = {}) {
     "Native select replaced with two independently toggleable buttons");
   assert.doesNotMatch(source, /data-scope="all"|>Everywhere<\/button>/, "No Everywhere button");
   assert.match(source, /id="ad-exclude-search"/, "Search field exists");
-  assert.match(source, /id="ad-diag-resize"/, "Custom drag handle exists");
+  assert.match(source, /id="ad-diag-resize"/, "Bottom-edge resize grip exists");
+  assert.ok(source.indexOf('id="ad-diag-resize"') > source.indexOf('id="ad-retry-foot"'),
+    "Resize grip is positioned after Reconnect modules on the bottom border");
+  assert.doesNotMatch(source, /class="diag-resizer"/,
+    "Old internal green divider is not rendered");
   assert.match(source, /class="scope-switch" role="group"/,
     "Scope segmented control remains labelled");
   const toggleIndex = source.indexOf('id="ad-toggle"');
@@ -1035,7 +1041,7 @@ function createEnvironment(options = {}) {
     "Existing recipient user ID resolves to the DM channel");
   pickerNames.window.DiscordAutoDelete.stop();
 
-  // Diagnostics expands via pointer dragging and persists user-selected height.
+  // Diagnostics expands from its bottom border and remembers the height.
   const resizeEnv = createEnvironment();
   vm.runInContext(source, resizeEnv.context, { timeout: 3000 });
   const handle = resizeEnv.ids.get("ad-diag-resize");
