@@ -178,6 +178,7 @@
         confirmedScheduled: state.telemetry.confirmed,
         ageRejected: state.telemetry.ageRejected,
         snowflakeRecovered: state.telemetry.snowflakeRecovered,
+        nonceRecovered: state.telemetry.nonceRecovered,
         lastAgeRejectionReason: state.telemetry.lastAgeRejectionReason,
         lastRejectedAgeSeconds: state.telemetry.lastRejectedAgeSeconds,
         invalidChannel: state.telemetry.invalidChannel,
