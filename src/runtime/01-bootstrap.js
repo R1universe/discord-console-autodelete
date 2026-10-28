@@ -1,7 +1,7 @@
   const NAME = "DiscordAutoDelete";
   const HOST_ID = "discord-autodelete-v2";
   const SETTINGS_KEY = "discord-autodelete-ui-v2";
-  const VERSION = "3.20.0";
+  const VERSION = "3.21.0";
   const validId = value => /^\d{15,22}$/.test(String(value ?? ""));
   const validDelay = value => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 86400;
   const scopes = new Set(["all", "servers", "dm"]);
@@ -47,7 +47,8 @@
     requests: 0, deleted: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(),
     attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), cacheObservedSince: new Map(), enabledSince: 0, nextDeletionAt: 0, monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false,
-    telemetry: { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0, ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0 }
+    telemetry: { ownEvents: 0, updates: 0, provisional: 0, cacheCandidates: 0, ageRejected: 0, invalidChannel: 0, confirmed: 0, lastOwnEventAt: 0,
+      snowflakeRecovered: 0, lastAgeRejectionReason: "none", lastRejectedAgeSeconds: null }
   };
   let ticker = null;
   let hooks = null;
