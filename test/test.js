@@ -331,6 +331,25 @@ function createEnvironment(options = {}) {
     assert.ok(script.includes("#2d3857a1") && script.includes("#193c3aa3"), file + " softens normal and active full-panel glass");
     assert.ok(script.includes("#273251bd") && script.includes("#1c4943be"), file + " softens normal and active mini glass");
   }
+  // A newer paste stops old code; a same-version paste only reopens the window.
+  const sameVersion = createEnvironment();
+  let sameOpened = 0;
+  sameVersion.window.DiscordAutoDelete = { version: "3.16.0", open() { sameOpened++; } };
+  vm.runInContext(source, sameVersion.context, { timeout: 3000 });
+  assert.equal(sameOpened, 1, "Same version reopens without duplicate instance");
+  const oldVersion = createEnvironment();
+  let previousStopped = 0;
+  oldVersion.window.DiscordAutoDelete = {
+    version: "3.15.0",
+    open() { throw new Error("Outdated code must not reopen"); },
+    stop() { previousStopped++; delete oldVersion.window.DiscordAutoDelete; }
+  };
+  vm.runInContext(source, oldVersion.context, { timeout: 3000 });
+  assert.equal(previousStopped, 1, "Old instance is stopped");
+  assert.equal(oldVersion.window.DiscordAutoDelete.version, "3.16.0", "New controller version");
+  assert.equal(oldVersion.window.DiscordAutoDelete.running, false, "Upgrade starts paused");
+  oldVersion.window.DiscordAutoDelete.stop();
+
   // Minimize becomes a tiny, live and draggable status window.
   assert.doesNotMatch(source, /id="ad-pill"|ad-pill-text|class="pill"|\.collapsed \.pill/,
     "Legacy large minimized pill was not restored");
@@ -373,7 +392,7 @@ function createEnvironment(options = {}) {
   assert.equal(e.ids.get("ad-panel").style.display, "", "Expand works after drag");
 
   // v3.15: a draggable minimized status window and retained v3.14 features.
-  assert.match(source, /AutoDelete <span class="version">v3\.15<\/span>/);
+  assert.match(source, /AutoDelete <span class="version">v3\.16<\/span>/);
   assert.match(source, /<details class="diagnostics" id="ad-diagnostics">/,
     "Safety and activity live in a native collapsed disclosure");
   assert.match(source, /<summary>Diagnostics<\/summary>/,
