@@ -1054,6 +1054,16 @@ function createEnvironment(options = {}) {
   assert.equal(JSON.parse(resizeEnv.stored.get("discord-autodelete-ui-v2")).diagnosticsHeight, 270);
   handle.dispatch("keydown", { key: "ArrowUp", preventDefault() {}, stopPropagation() {} });
   assert.equal(logView.style.height, "246px", "Arrow keys also resize");
+  // The border cannot grow beyond the viewport; this limit stays fixed
+  // for the entire pointer drag instead of jumping as the panel grows.
+  const limitedRect = resizeEnv.ids.get("ad-panel");
+  limitedRect.getBoundingClientRect = () => ({ bottom: 870 });
+  handle.dispatch("pointerdown", { clientY: 100, button: 0, preventDefault() {}, stopPropagation() {} });
+  resizeEnv.documentDispatch("pointermove", { clientY: 400 });
+  assert.equal(logView.style.height, "271px", "Drag growth stops at available viewport edge");
+  resizeEnv.documentDispatch("pointermove", { clientY: 425 });
+  assert.equal(logView.style.height, "271px", "Viewport limit does not oscillate while dragging");
+  resizeEnv.documentDispatch("pointerup", {});
   resizeEnv.window.DiscordAutoDelete.stop();
 
   // Flood regression: the original code would fire DELETEs simultaneously.
