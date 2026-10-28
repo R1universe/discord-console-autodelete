@@ -48,7 +48,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 - **No manual token entry or token scraping:** uses Discord's internal authenticated `RestAPI.del()` or `MessageActions.deleteMessage()` when discoverable.
 - **Countdown diagnostics:** see the time remaining before each pending deletion attempt without showing message text or identifiers.
 - **Honest counters:** **Queued / Deleted / Errors**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted.
-- **Draggable mini dashboard:** **Minimize (−)** shrinks the full overlay to a **250px compact status window** showing live **Queued / Deleted / Errors** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
+- **Draggable mini dashboard:** **Minimize (−)** collapses the full overlay to a **same-width, shorter status window** (both modes are scaled down by 12%) showing live **Queued / Deleted / Errors** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
 - **Local preferences:** delays, scope, and excluded DM/server IDs are remembered in the browser; **the script starts disabled on every fresh load**.
 
 ## Quick start — Discord Web console

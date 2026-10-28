@@ -72,8 +72,8 @@ function createEnvironment(options = {}) {
       node.getBoundingClientRect = () => ({
         left: Number.parseFloat(node.style.left) || 0,
         top: Number.parseFloat(node.style.top) || 0,
-        width: ids.get("ad-mini-panel")?.hidden === false ? 250 : 392,
-        height: ids.get("ad-mini-panel")?.hidden === false ? 80 : 520
+        width: 345, // Both 392px panels render at 88% scale (344.96px).
+        height: ids.get("ad-mini-panel")?.hidden === false ? 70 : 458
       });
     } },
     createElement: fakeElement,
@@ -285,6 +285,16 @@ function createEnvironment(options = {}) {
   vm.runInContext(source, e.context, { timeout: 3000 });
   const api = e.window.DiscordAutoDelete;
   assert.ok(api, "Controller exported");
+  // v3.15 compact glass regression: both modes have identical scaled widths.
+  for (const file of ["autodelete.js", "AutoDelete.plugin.js"]) {
+    const script = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+    assert.ok(script.includes('".ad-shell{zoom:.88}"'), file + " uses a consistent 12% smaller UI");
+    assert.ok(script.includes('root.className = "ad-shell";'), file + " scales the entire UI");
+    assert.ok(script.includes('".panel{width:392px;max-width:calc(100vw - 24px);'), file + " retains the full panel width");
+    assert.ok(script.includes('".mini-panel{position:relative;width:392px;max-width:calc(100vw - 24px);'), file + " matches compact width");
+    assert.ok(script.includes("#2d3857a1") && script.includes("#193c3aa3"), file + " softens normal and active full-panel glass");
+    assert.ok(script.includes("#273251bd") && script.includes("#1c4943be"), file + " softens normal and active mini glass");
+  }
   // Minimize becomes a tiny, live and draggable status window.
   assert.doesNotMatch(source, /id="ad-pill"|ad-pill-text|class="pill"|\.collapsed \.pill/,
     "Legacy large minimized pill was not restored");
