@@ -40,7 +40,7 @@
   const state = {
     ready: false, enabled: false, error: "", pending: new Map(),
     requests: 0, deleted: 0, failed: 0, skipped: 0, detected: 0, processed: new Set(), processedNonces: new Set(),
-    attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), monitor: "",
+    attemptedIds: new Set(), countedDeleted: new Set(), cacheSeen: new Map(), nextDeletionAt: 0, monitor: "",
     accountId: null, connected: null, recent: [], destroyed: false
   };
   let ticker = null;
@@ -355,6 +355,8 @@
   function clearPending() {
     for (const job of state.pending.values()) clearTimeout(job.timer);
     state.pending.clear();
+    state.nextDeletionAt = 0;
+    provisional.clear();
     render();
   }
 
@@ -603,13 +605,102 @@
     return msg.nonce != null && id === String(msg.nonce);
   }
 
+  // Space out expirations: Discord can rate-limit simultaneous deletions.
+  const DELETE_SPACING_MS = 1400;
+  const MAX_RATE_LIMIT_RETRIES = 2;
+  function reserveDeletionSlot(job, minWaitMs) {
+    const now = Date.now();
+    const slot = Math.max(now + Math.max(0, minWaitMs), state.nextDeletionAt + DELETE_SPACING_MS);
+    state.nextDeletionAt = slot;
+    job.deadline = slot;
+    job.timer = setTimeout(() => attemptDeletion(job), slot - now);
+  }
+  function rateLimitDelay(error) {
+    const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status);
+    if (status !== 429) return null;
+    const seconds = Number(error?.retry_after ?? error?.body?.retry_after ??
+      error?.response?.data?.retry_after);
+    return Number.isFinite(seconds) && seconds > 0 ?
+      Math.max(1500, Math.min(60000, Math.ceil(seconds * 1000))) : 5000;
+  }
+  async function attemptDeletion(job) {
+    const { id, channelId } = job;
+    if (state.pending.get(id) !== job || state.destroyed || !state.enabled) return;
+    job.timer = null;
+    if (String(hooks?.users?.getCurrentUser?.()?.id ?? "") !== state.accountId) {
+      state.pending.delete(id);
+      state.skipped++;
+      notify("Account changed — skipping deletion.", "bad");
+      render();
+      return;
+    }
+    state.requests++;
+    state.attemptedIds.add(id);
+    if (state.attemptedIds.size > 1500)
+      state.attemptedIds.delete(state.attemptedIds.values().next().value);
+    try {
+      if (hooks.rest) {
+        await Promise.resolve(hooks.rest.del({ url: "/channels/" + channelId + "/messages/" + id }));
+      } else {
+        await Promise.resolve(hooks.actions.deleteMessage(channelId, id));
+      }
+      if (state.pending.get(id) === job) state.pending.delete(id);
+      notify("Delete action invoked (server result not independently verified).", "good");
+    } catch (error) {
+      const retryMs = rateLimitDelay(error);
+      if (retryMs !== null && job.retries < MAX_RATE_LIMIT_RETRIES &&
+          state.enabled && !state.destroyed && state.pending.get(id) === job) {
+        job.retries++;
+        reserveDeletionSlot(job, retryMs);
+        notify("Rate limited (429); retry " + job.retries + "/" + MAX_RATE_LIMIT_RETRIES +
+          " scheduled in " + formatRemaining(job.deadline - Date.now()) + ".", "bad");
+      } else {
+        if (state.pending.get(id) === job) state.pending.delete(id);
+        state.failed++;
+        notify("Caught delete error: " + String(error?.message ?? error).slice(0, 140), "bad");
+      }
+    }
+    render();
+  }
+  // Track provisional self-sends so MESSAGE_UPDATE does not delete old edited history.
+  const provisional = new Map();
+  function rememberProvisional(msg, channelId) {
+    if (!validId(channelId) || !(msg.nonce != null || validId(msg.id))) return;
+    provisional.set(channelId + ":" + String(msg.nonce ?? msg.id), Date.now());
+    if (provisional.size > 2000) provisional.delete(provisional.keys().next().value);
+  }
+  function onUpdate(event) {
+    if (!state.enabled || !hooks || state.destroyed) return;
+    const fromEvent = event?.message;
+    const channelId = String(event?.channelId ?? event?.channel_id ??
+      fromEvent?.channel_id ?? fromEvent?.channelId ?? "");
+    const id = String(fromEvent?.id ?? event?.messageId ?? event?.id ?? "");
+    if (!validId(channelId) || !validId(id)) return;
+    const cached = hooks.messageStore?.getMessage?.(channelId, id);
+    const msg = cached && !isProvisional(cached) ? cached : fromEvent;
+    if (!msg || isProvisional(msg, event)) return;
+    const nonce = String(msg.nonce ?? "");
+    const nonceKey = nonce ? channelId + ":" + nonce : "";
+    const idKey = channelId + ":" + id;
+    const matchedKey = nonceKey && provisional.has(nonceKey) ? nonceKey :
+      provisional.has(idKey) ? idKey : null;
+    if (!matchedKey || Date.now() - provisional.get(matchedKey) > 90000) return;
+    onCreate({ message: msg, channelId });
+    if (state.pending.has(id) || state.processed.has(id)) {
+      if (nonceKey) provisional.delete(nonceKey);
+      provisional.delete(idKey);
+    }
+  }
   function onCreate(event) {
     if (!state.enabled || !hooks || state.destroyed) return;
     const msg = event?.message;
     if (!msg || String(msg.author?.id ?? "") !== state.accountId) return;
-    if (isProvisional(msg, event)) return;
-    const id = String(msg.id ?? "");
     const channelId = String(event?.channelId ?? event?.channel_id ?? msg.channel_id ?? msg.channelId ?? "");
+    if (isProvisional(msg, event)) {
+      rememberProvisional(msg, channelId);
+      return;
+    }
+    const id = String(msg.id ?? "");
     if (!validId(id) || !validId(channelId) || state.pending.has(id) || state.processed.has(id)) return;
     const kind = classifyChannel(msg, channelId);
     if (!scopeMatches(kind)) { state.skipped++; return; }
@@ -620,8 +711,6 @@
       return;
     }
     const delaySeconds = kind === "servers" ? config.serverDelay : config.dmDelay;
-    // Some clients emit more than one confirmed object for the same send.
-    // The client nonce correlates them without reading/storing message text.
     const nonceKey = msg.nonce == null ? null : channelId + ":" + String(msg.nonce);
     if (nonceKey && state.processedNonces.has(nonceKey)) return;
     state.processed.add(id);
@@ -632,38 +721,10 @@
         state.processedNonces.delete(state.processedNonces.values().next().value);
     }
     state.detected++;
-    const deadline = Date.now() + delaySeconds * 1000;
-    const timer = setTimeout(async () => {
-      state.pending.delete(id);
-      render();
-      if (state.destroyed || !state.enabled) return;
-      if (String(hooks.users.getCurrentUser()?.id ?? "") !== state.accountId) {
-        state.skipped++;
-        notify("Account changed — skipping deletion.", "bad");
-        render();
-        return;
-      }
-      // Count an attempt before invoking the client's delete action.
-      // MessageActions may return void and perform async HTTP in the background,
-      // so resolving this call is NOT a server-confirmed successful deletion.
-      state.requests++;
-      state.attemptedIds.add(id);
-      if (state.attemptedIds.size > 1500) state.attemptedIds.delete(state.attemptedIds.values().next().value);
-      try {
-        if (hooks.rest) {
-          await Promise.resolve(hooks.rest.del({ url: "/channels/" + channelId + "/messages/" + id }));
-        } else {
-          await Promise.resolve(hooks.actions.deleteMessage(channelId, id));
-        }
-        notify("Delete action invoked (server result not independently verified).", "good");
-      } catch (err) {
-        state.failed++;
-        notify("Caught delete error: " + String(err?.message ?? err).slice(0, 140), "bad");
-      }
-      render();
-    }, delaySeconds * 1000);
-    state.pending.set(id, { timer, deadline, kind, channelId, guildId });
-    notify((kind === "dm" ? "DM" : "Server") + " message scheduled for a deletion attempt in " + delaySeconds + "s.");
+    const job = { id, channelId, guildId, kind, deadline: 0, timer: null, retries: 0 };
+    state.pending.set(id, job);
+    reserveDeletionSlot(job, delaySeconds * 1000);
+    notify((kind === "dm" ? "DM" : "Server") + " message queued for deletion attempt.");
     render();
   }
   function onDelete(event) {
@@ -728,6 +789,7 @@
     if (hooks) {
       for (const dispatcher of hooks.activeDispatchers ?? []) {
         try { dispatcher.unsubscribe?.("MESSAGE_CREATE", onCreate); } catch {}
+        try { dispatcher.unsubscribe?.("MESSAGE_UPDATE", onUpdate); } catch {}
         try { dispatcher.unsubscribe?.("MESSAGE_DELETE", onDelete); } catch {}
       }
     }
@@ -751,9 +813,11 @@
         try {
           dispatcher.subscribe("MESSAGE_CREATE", onCreate);
           dispatcher.subscribe("MESSAGE_DELETE", onDelete);
+          try { dispatcher.subscribe("MESSAGE_UPDATE", onUpdate); } catch {}
           discovered.activeDispatchers.push(dispatcher);
         } catch {
           try { dispatcher.unsubscribe?.("MESSAGE_CREATE", onCreate); } catch {}
+          try { dispatcher.unsubscribe?.("MESSAGE_UPDATE", onUpdate); } catch {}
         }
       }
       const usingCache = !!(discovered.messageStore && discovered.selectedChannel);
@@ -787,6 +851,8 @@
       return false;
     }
     primeCache();
+    state.nextDeletionAt = 0;
+    provisional.clear();
     state.enabled = true;
     notify("Auto-delete enabled.", "good");
     render();
