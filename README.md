@@ -12,7 +12,7 @@
   <img src="assets/autodelete-active.webp" alt="Previous AutoDelete v3.13 interface, before the v3.14 exclusion picker and Deleted counter" width="350">
 </p>
 
-<p align="center"><sub>Previous v3.13 interface · v3.15 adds exclusion pickers and a draggable compact status view; current builds show inline message countdowns</sub></p>
+<p align="center"><sub>Previous v3.13 interface · v3.16 adds paced burst deletion, independent scope switches and a draggable compact status view; current builds show inline message countdowns</sub></p>
 
 > [!WARNING]
 > **Experimental, unofficial Discord self-bot automation.** Discord prohibits automating regular user accounts; using this script can result in account restrictions or termination. The tool does **not guarantee** that a message will disappear at the requested time, or that it was not read, copied, saved or logged beforehand. Not affiliated with Discord.
@@ -46,6 +46,9 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 - **Choose where:** **Servers and DMs are independent switches** (both can be enabled, or either alone; at least one remains selected). Each category has its own **Excluded** picker to protect individual DMs or servers; exclusions persist locally.
 - **In-Discord glass dashboard:** floating and draggable UI, color-coded disabled/enabled states, timer controls and collapsible diagnostics.
 - **No manual token entry or token scraping:** uses Discord's internal authenticated `RestAPI.del()` or `MessageActions.deleteMessage()` when discoverable.
+- **Burst handling:** deletion attempts are spaced at least 1.4 seconds apart; messages expiring together can remain queued longer than their configured minimum delay. Explicit `429` errors are retried at most twice with backoff; failures hidden by the Discord client may remain undetected.
+- **Acknowledged sends:** an additional message-update listener recovers some provisional-to-confirmed transitions without treating unrelated historical edits as new messages.
+- **Version-aware reload:** pasting the updated script stops an older in-page instance (cancels its pending timers) and starts the new build disabled.
 - **Inline expiry indicators:** a live timer appears next to each visible, newly sent message in Discord DMs and servers; it disappears after an attempt or cancellation. No message text is read or stored.
 - **Honest counters:** **Queued / Deleted**. Deleted counts only matching `MESSAGE_DELETE` events observed after an AutoDelete attempt; it may undercount if events are unavailable. Calls alone never increase Deleted. Caught errors are recorded in Diagnostics rather than shown as a counter.
 - **Draggable mini dashboard:** **Minimize (−)** collapses the full overlay to a **same-width, shorter status window** (both modes are scaled down by 12%) showing live **Queued / Deleted** counters. Drag it anywhere on screen, and press **↗** to expand. Monitoring and queued timers continue while minimized; `DiscordAutoDelete.open()` expands it from the console.
@@ -65,7 +68,7 @@ This is a **distinct approach**, not a claim to be the world's first Discord del
 
 ## Discord Canary desktop — BetterDiscord plugin (experimental)
 
-For a Discord Canary desktop installation with [BetterDiscord](https://betterdiscord.app/), install the standalone [`AutoDelete.plugin.js`](./AutoDelete.plugin.js). This is a separate packaging of the v3.15 console prototype; the original `autodelete.js` remains available.
+For a Discord Canary desktop installation with [BetterDiscord](https://betterdiscord.app/), install the standalone [`AutoDelete.plugin.js`](./AutoDelete.plugin.js). This is a separate packaging of the v3.16 console prototype; the original `autodelete.js` remains available.
 
 1. In BetterDiscord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
 2. Download the plugin from [GitHub](./AutoDelete.plugin.js) using **Download raw file**, and put `AutoDelete.plugin.js` in that folder.
@@ -122,7 +125,7 @@ Caught errors are reported in the **Diagnostics** activity log and remain availa
 
 ## Project status
 
-**v3.15 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
+**v3.16 · Experimental JavaScript browser-console prototype.** Automated checks cover mocked Discord client scenarios; **they do not certify compatibility or successful deletion on live Discord**.
 
 - [Source code](./autodelete.js)
 - [Manual QA test plan](./QA_TEST_PLAN.md)
