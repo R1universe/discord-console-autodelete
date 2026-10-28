@@ -879,10 +879,15 @@
           addId(item);
         }
       };
-      for (const store of [hooks?.privateChannelStore, hooks?.channelStore])
+      // Never mix the authoritative opened-DM list with a stale general cache.
+      for (const method of ["getPrivateChannelIds", "getSortedPrivateChannels", "getPrivateChannels"]) {
+        try { collect(hooks?.privateChannelStore?.[method]?.()); } catch {}
+      }
+      if (!ids.size) {
         for (const method of ["getPrivateChannelIds", "getSortedPrivateChannels", "getPrivateChannels"]) {
-          try { collect(store?.[method]?.()); } catch {}
+          try { collect(hooks?.channelStore?.[method]?.()); } catch {}
         }
+      }
       const current = currentOpenChannelId();
       if (validId(current)) ids.add(current);
       for (const id of ids) {
